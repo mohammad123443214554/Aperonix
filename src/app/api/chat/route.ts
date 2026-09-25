@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 import {
   buildGroqMessages,
@@ -11,6 +12,33 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    const authorization = request.headers.get("authorization");
+    const accessToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice(7)
+      : "";
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey || !accessToken) {
+      return NextResponse.json(
+        { error: "Authentication is required." },
+        { status: 401 }
+      );
+    }
+
+    const authClient = createClient(supabaseUrl, supabaseKey);
+    const { data: authData, error: authError } = await authClient.auth.getUser(
+      accessToken
+    );
+
+    if (authError || !authData.user || authData.user.is_anonymous) {
+      return NextResponse.json(
+        { error: "Authentication is required." },
+        { status: 401 }
+      );
+    }
+
     const body = (await request.json()) as { messages?: ChatMessage[] };
     const messages = Array.isArray(body.messages) ? body.messages : [];
 
