@@ -78,9 +78,16 @@ export default function AuthExperience() {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
-      setAuthenticated(Boolean(data.session && !data.session.user.is_anonymous));
+
+      if (data.session?.user.is_anonymous) {
+        await supabase.auth.signOut();
+        setAuthenticated(false);
+      } else {
+        setAuthenticated(Boolean(data.session));
+      }
+
       setSessionLoading(false);
     });
 
@@ -498,8 +505,8 @@ export default function AuthExperience() {
               <input
                 inputMode="numeric"
                 value={phone}
-                onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 10))}
-                maxLength={10}
+                onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 15))}
+                maxLength={15}
                 pattern="[0-9]{10}"
                 autoComplete="tel-national"
                 placeholder="10-digit phone number"
