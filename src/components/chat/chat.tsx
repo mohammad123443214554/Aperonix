@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 import type { ChatMessage } from "@/types/chat";
 
@@ -23,6 +24,16 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    const element = document.querySelector<HTMLTextAreaElement>(
+      ".composer textarea"
+    );
+
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
+  }, [input]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,15 +67,12 @@ export default function Chat() {
           content: data.message?.content || "I could not generate a response."
         }
       ]);
-    } catch (error) {
+    } catch {
       setMessages((current) => [
         ...current,
         {
           role: "assistant",
-          content:
-            error instanceof Error
-              ? "Sorry, something went wrong. Please try again."
-              : "Sorry, something went wrong."
+          content: "Sorry, something went wrong. Please try again."
         }
       ]);
     } finally {
@@ -108,22 +116,29 @@ export default function Chat() {
                 <img src="/aperonix-logo.png" alt="" className="avatar" />
               )}
 
-              <div className="message-bubble">
-                <div className="message-label">
-                  {message.role === "assistant" ? "Aperonix" : "You"}
+              {message.role === "assistant" ? (
+                <div className="assistant-content">
+                  <div className="message-label">Aperonix</div>
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
                 </div>
-                <p>{message.content}</p>
-              </div>
+              ) : (
+                <div className="user-bubble">
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                </div>
+              )}
             </article>
           ))}
 
           {isLoading && (
             <article className="message-row assistant">
               <img src="/aperonix-logo.png" alt="" className="avatar" />
-              <div className="message-bubble typing" aria-label="Aperonix is typing">
-                <span />
-                <span />
-                <span />
+              <div className="assistant-content">
+                <div className="message-label">Aperonix</div>
+                <div className="typing" aria-label="Aperonix is typing">
+                  <span />
+                  <span />
+                  <span />
+                </div>
               </div>
             </article>
           )}
