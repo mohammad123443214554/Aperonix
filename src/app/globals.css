@@ -838,3 +838,36 @@ button:disabled { cursor: not-allowed; }
   .field-grid.two, .field-grid.three, .phone-row { grid-template-columns: 1fr; }
   .auth-back { top: 12px; left: 12px; }
 }
+
+
+.auth-confirm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 2, 8, 0.76);
+  backdrop-filter: blur(8px);
+}
+.auth-confirm-modal {
+  width: min(410px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(79,126,190,.28);
+  border-radius: 18px;
+  background: #071225;
+  box-shadow: 0 28px 90px rgba(0,0,0,.5), inset 0 1px rgba(160,196,244,.05);
+  text-align: center;
+}
+.auth-confirm-modal h2 {
+  margin: 10px 0 8px;
+  color: #f2f7ff;
+  font-size: 21px;
+}
+.auth-confirm-modal p {
+  margin: 8px 0;
+  color: #93a8c5;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.auth-confirm-modal strong { color: #e8f1ff; }
