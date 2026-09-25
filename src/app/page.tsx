@@ -1,5 +1,5 @@
-import Chat from "@/components/chat/chat";
+import AuthExperience from "@/components/auth/auth-experience";
 
 export default function Home() {
-  return <Chat />;
+  return <AuthExperience />;
 }
