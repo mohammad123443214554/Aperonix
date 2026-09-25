@@ -5,7 +5,12 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Aperonix AI",
   description:
-    "Aperonix AI — a long-term AI assistant project created by Mohammad Khan."
+    "Aperonix AI — a long-term AI assistant project created by Mohammad Khan.",
+  icons: {
+    icon: "/aperonix-logo.png",
+    shortcut: "/aperonix-logo.png",
+    apple: "/aperonix-logo.png"
+  }
 };
 
 export default function RootLayout({
