@@ -72,6 +72,7 @@ export default function AuthExperience() {
   const [signinPassword, setSigninPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
 
   const years = useMemo(getYears, []);
 
@@ -203,7 +204,7 @@ export default function AuthExperience() {
       return;
     }
 
-    setScreen("confirmation");
+    setShowConfirmationModal(true);
   }
 
   async function handleSignin(event: FormEvent<HTMLFormElement>) {
@@ -558,6 +559,30 @@ export default function AuthExperience() {
           <button type="button" onClick={() => resetErrorAnd("signin")}>Sign in</button>
         </div>
       </section>
+
+      {showConfirmationModal && (
+        <div className="auth-confirm-modal-backdrop" role="presentation">
+          <div className="auth-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="email-confirm-title">
+            <div className="confirmation-icon">✓</div>
+            <h2 id="email-confirm-title">Check your email</h2>
+            <p>
+              A confirmation message will be sent to <strong>{email.trim()}</strong>
+              from Supabase.
+            </p>
+            <p className="auth-small">
+              Open the message and confirm your email. After confirmation, Aperonix AI
+              will take you to the chatbot.
+            </p>
+            <button
+              type="button"
+              className="get-started auth-full-button"
+              onClick={() => setShowConfirmationModal(false)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
