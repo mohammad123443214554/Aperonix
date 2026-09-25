@@ -36,8 +36,14 @@ begin
   )
   values (
     new.id,
-    nullif(metadata->>'first_name', ''),
-    nullif(metadata->>'last_name', ''),
+    coalesce(
+      nullif(metadata->>'first_name', ''),
+      nullif(split_part(full_name, ' ', 1), '')
+    ),
+    coalesce(
+      nullif(metadata->>'last_name', ''),
+      nullif(trim(regexp_replace(full_name, '^\\S+\\s*', '')), '')
+    ),
     case
       when nullif(metadata->>'date_of_birth', '') is not null
         then (metadata->>'date_of_birth')::date
