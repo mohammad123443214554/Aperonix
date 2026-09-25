@@ -10,7 +10,8 @@ export const metadata: Metadata = {
     icon: "/aperonix-logo.png",
     shortcut: "/aperonix-logo.png",
     apple: "/aperonix-logo.png"
-  }
+  },
+  manifest: "/manifest.webmanifest"
 };
 
 export default function RootLayout({
