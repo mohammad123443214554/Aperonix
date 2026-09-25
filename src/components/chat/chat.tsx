@@ -47,6 +47,9 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteSession, setDeleteSession] = useState<ChatSession | null>(null);
+  const [renameSession, setRenameSession] = useState<ChatSession | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -208,13 +211,17 @@ export default function Chat() {
     setIsSidebarOpen(false);
   }
 
-  async function handleDelete(session: ChatSession) {
+  function handleDelete(session: ChatSession) {
     if (isLoading) return;
     setOpenMenuId(null);
+    setDeleteSession(session);
+  }
 
-    if (!window.confirm(`Delete "${session.title}"? This will also delete its messages.`)) {
-      return;
-    }
+  async function confirmDelete() {
+    if (!deleteSession || isLoading) return;
+
+    const session = deleteSession;
+    setDeleteSession(null);
 
     const { error } = await supabase
       .from("chat_sessions")
@@ -230,18 +237,31 @@ export default function Chat() {
     setSessions(remaining);
 
     if (session.id === activeSessionId) {
-      setActiveSessionId(remaining[0]?.id ?? "");
-      if (remaining.length === 0) await handleNewChat();
+      if (remaining.length > 0) {
+        setActiveSessionId(remaining[0].id);
+      } else {
+        await handleNewChat();
+      }
     }
   }
 
-  async function handleRename(session: ChatSession) {
+  function handleRename(session: ChatSession) {
     if (isLoading) return;
     setOpenMenuId(null);
+    setRenameSession(session);
+    setRenameValue(session.title);
+  }
 
-    const nextTitle = window.prompt("Rename chat", session.title)?.trim();
-    if (!nextTitle || nextTitle === session.title) return;
+  async function confirmRename() {
+    if (!renameSession || isLoading) return;
 
+    const nextTitle = renameValue.trim();
+    if (!nextTitle || nextTitle === renameSession.title) {
+      setRenameSession(null);
+      return;
+    }
+
+    const session = renameSession;
     const { error } = await supabase
       .from("chat_sessions")
       .update({ title: nextTitle, updated_at: new Date().toISOString() })
@@ -259,6 +279,7 @@ export default function Chat() {
           : item
       )
     );
+    setRenameSession(null);
   }
 
   async function handlePin(session: ChatSession) {
@@ -655,6 +676,45 @@ export default function Chat() {
           </p>
         </div>
       </section>
+
+      {deleteSession && (
+        <div className="chat-modal-backdrop" role="presentation" onClick={() => setDeleteSession(null)}>
+          <div className="chat-modal" role="dialog" aria-modal="true" aria-labelledby="delete-chat-title" onClick={(event) => event.stopPropagation()}>
+            <div className="chat-modal-title" id="delete-chat-title">Delete chat?</div>
+            <p>This will also delete all messages in this chat.</p>
+            <div className="chat-modal-actions">
+              <button type="button" onClick={() => setDeleteSession(null)}>Cancel</button>
+              <button type="button" className="danger" onClick={() => void confirmDelete()}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renameSession && (
+        <div className="chat-modal-backdrop" role="presentation" onClick={() => setRenameSession(null)}>
+          <div className="chat-modal" role="dialog" aria-modal="true" aria-labelledby="rename-chat-title" onClick={(event) => event.stopPropagation()}>
+            <div className="chat-modal-title" id="rename-chat-title">Rename chat</div>
+            <input
+              className="chat-modal-input"
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void confirmRename();
+                }
+                if (event.key === "Escape") setRenameSession(null);
+              }}
+              autoFocus
+              maxLength={80}
+            />
+            <div className="chat-modal-actions">
+              <button type="button" onClick={() => setRenameSession(null)}>Cancel</button>
+              <button type="button" className="primary" onClick={() => void confirmRename()}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
