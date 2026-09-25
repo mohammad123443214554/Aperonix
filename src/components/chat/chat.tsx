@@ -28,19 +28,17 @@ function makeTitle(content: string) {
   return cleaned.length > 38 ? `${cleaned.slice(0, 38)}…` : cleaned || "New chat";
 }
 
-async function ensureAnonymousUser() {
-  const existing = await supabase.auth.getUser();
-  if (existing.data.user) return existing.data.user;
+async function ensureAuthenticatedUser() {
+  const { data, error } = await supabase.auth.getUser();
 
-  const signedIn = await supabase.auth.signInAnonymously();
-  if (signedIn.error || !signedIn.data.user) {
-    throw signedIn.error ?? new Error("Could not create an anonymous session.");
+  if (error || !data.user || data.user.is_anonymous) {
+    throw error ?? new Error("Please sign in to use Aperonix AI.");
   }
 
-  return signedIn.data.user;
+  return data.user;
 }
 
-export default function Chat() {
+export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [input, setInput] = useState("");
@@ -57,7 +55,7 @@ export default function Chat() {
 
     async function loadHistory() {
       try {
-        const user = await ensureAnonymousUser();
+        const user = await ensureAuthenticatedUser();
 
         await supabase.from("profiles").upsert(
           { id: user.id },
@@ -182,7 +180,7 @@ export default function Chat() {
     if (isLoading) return;
 
     try {
-      const user = await ensureAnonymousUser();
+      const user = await ensureAuthenticatedUser();
       const { data, error } = await supabase
         .from("chat_sessions")
         .insert({ user_id: user.id, title: "New chat" })
@@ -318,7 +316,7 @@ export default function Chat() {
     setOpenMenuId(null);
 
     try {
-      const user = await ensureAnonymousUser();
+      const user = await ensureAuthenticatedUser();
       const title = `${session.title} (copy)`;
 
       const { data: copy, error: chatError } = await supabase
@@ -376,7 +374,7 @@ export default function Chat() {
     setIsLoading(true);
 
     try {
-      const user = await ensureAnonymousUser();
+      const user = await ensureAuthenticatedUser();
       const nextMessages: ChatMessage[] = [
         ...activeSession.messages,
         { role: "user", content }
@@ -575,7 +573,17 @@ export default function Chat() {
           </div>
         </div>
 
-        <div className="sidebar-footer">Aperonix AI</div>
+        <div className="sidebar-footer">
+          <span>Aperonix AI</span>
+          <button
+            type="button"
+            className="sign-out-button"
+            onClick={() => void onSignOut()}
+            disabled={isLoading}
+          >
+            Sign out
+          </button>
+        </div>
       </aside>
 
       {isSidebarOpen && (
