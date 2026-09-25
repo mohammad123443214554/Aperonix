@@ -96,10 +96,6 @@ export default function AuthExperience() {
       const isRealAccount = Boolean(session && !session.user.is_anonymous);
       setAuthenticated(isRealAccount);
 
-      if (isRealAccount) {
-        void syncProfile(session.user);
-      }
-
       if (event === "SIGNED_IN" && isRealAccount) {
         setScreen("landing");
       }
