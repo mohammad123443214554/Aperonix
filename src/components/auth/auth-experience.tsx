@@ -253,12 +253,15 @@ export default function AuthExperience() {
   const iconShift = (index: number) => {
     const center = index - (iconItems.length - 1) / 2;
     const depth = Math.abs(center);
-    const x = center * 170;
-    const y = center * 42;
-    const rotate = center * -7;
-    const scroll = scrolled * (center * 95);
+    const x = center * 156;
+    const baseY = 118 + depth * 11;
+    const scrollX = scrolled * center * 28;
+    const scrollY = scrolled * (index % 2 ? -42 : 46);
+    const rotateY = center * -4;
+    const rotateZ = center * 1.2;
+
     return {
-      transform: `translate3d(${x + scroll}px, ${y + scrolled * (index % 2 ? -85 : 70)}px, ${120 - depth * 65}px) rotateX(${8 + scrolled * 16}deg) rotateY(${rotate}deg) rotateZ(${center * 2}deg)`
+      transform: `translate3d(${x + scrollX}px, ${baseY + scrollY}px, ${95 - depth * 22}px) rotateX(${6 + scrolled * 8}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`
     };
   };
 
