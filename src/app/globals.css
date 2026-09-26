@@ -1833,3 +1833,218 @@ textarea:focus-visible {
     border-radius: 14px;
   }
 }
+
+
+/* Full account pages and typed deletion confirmation */
+.profile-screen-backdrop {
+  z-index: 20;
+}
+
+.account-page-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(34, 91, 179, .10), transparent 25%),
+    #01030d;
+}
+
+.account-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(82, 126, 184, .13);
+  background: rgba(1, 6, 18, .82);
+  backdrop-filter: blur(16px);
+}
+
+.account-page-back {
+  min-height: 35px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid rgba(87, 133, 193, .20);
+  border-radius: 9px;
+  background: rgba(16, 39, 70, .20);
+  color: #afc1d9;
+  font-size: 11px;
+  font-weight: 650;
+  transition: 150ms ease;
+}
+
+.account-page-back:hover {
+  background: rgba(31, 67, 112, .30);
+  border-color: rgba(96, 151, 224, .34);
+  color: #edf5ff;
+}
+
+.account-page-title {
+  margin-left: 14px;
+  color: #e6effc;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.account-page-content {
+  width: min(860px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 42px 0 70px;
+}
+
+.account-hero-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid rgba(89, 136, 196, .20);
+  border-radius: 16px;
+  background: rgba(5, 17, 35, .74);
+  box-shadow: 0 18px 55px rgba(0,0,0,.20);
+}
+
+.account-hero-card h1 {
+  margin: 7px 0 4px;
+  color: #f0f6ff;
+  font-size: 25px;
+  letter-spacing: -.03em;
+}
+
+.account-hero-card p {
+  margin: 0;
+  color: #7d94b2;
+  font-size: 11px;
+}
+
+.account-eyebrow {
+  color: #6d91bb;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.account-section-card {
+  margin-top: 14px;
+  padding: 22px;
+  border: 1px solid rgba(89, 136, 196, .18);
+  border-radius: 16px;
+  background: rgba(4, 14, 30, .82);
+}
+
+.account-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.account-section-heading h2 {
+  margin: 10px 0 4px;
+  color: #eef5ff;
+  font-size: 20px;
+  letter-spacing: -.025em;
+}
+
+.account-section-note {
+  margin: 0;
+  color: #657c9b;
+  font-size: 10px;
+}
+
+.account-view-grid {
+  margin-top: 2px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.account-view-grid > div {
+  min-height: 72px;
+}
+
+.edit-account-card {
+  width: min(720px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.delete-confirm-backdrop {
+  z-index: 240;
+}
+
+.account-delete-confirm {
+  width: min(470px, 100%);
+}
+
+.delete-confirm-instruction {
+  margin-top: 13px !important;
+  color: #a8b8ce !important;
+}
+
+.delete-confirm-input {
+  width: 100%;
+  min-height: 45px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border: 1px solid rgba(197, 83, 83, .28);
+  border-radius: 9px;
+  outline: 0;
+  background: rgba(2, 8, 19, .88);
+  color: #f0f5ff;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: .02em;
+  transition: 150ms ease;
+}
+
+.delete-confirm-input:focus {
+  border-color: rgba(235, 102, 102, .62);
+  box-shadow: 0 0 0 3px rgba(225, 76, 76, .07);
+}
+
+.account-delete-error {
+  margin: 13px 0 0 !important;
+  text-align: left;
+}
+
+.modal-danger:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .account-page-header {
+    padding: 0 12px;
+  }
+
+  .account-page-content {
+    width: min(100% - 22px, 620px);
+    padding: 24px 0 42px;
+  }
+
+  .account-hero-card {
+    align-items: flex-start;
+    padding: 18px;
+  }
+
+  .account-section-card {
+    padding: 18px;
+  }
+
+  .account-section-heading {
+    flex-direction: column;
+  }
+
+  .account-section-heading .modal-primary {
+    width: 100%;
+  }
+
+  .account-view-grid {
+    grid-template-columns: 1fr;
+  }
+}
