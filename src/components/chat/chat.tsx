@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
+import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
 import type { ChatMessage, ChatSession } from "@/types/chat";
 
@@ -49,6 +50,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [renameSession, setRenameSession] = useState<ChatSession | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [profile, setProfile] = useState({
     firstName: "",
@@ -488,6 +490,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  function openProfileDetails() {
+    setProfileOpen(false);
+    setProfileDetailsOpen(true);
+  }
+
   function openProfileEditor() {
     setProfileDraft(profile);
     setProfileEditOpen(true);
@@ -746,7 +753,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 <small>{profile.email}</small>
               </div>
             </div>
-            <button type="button" onClick={() => setProfileOpen(false)}>Profile details</button>
+            <button type="button" onClick={openProfileDetails}>Profile details</button>
             <button type="button" onClick={openProfileEditor}>Edit profile</button>
             <button type="button" onClick={() => void onSignOut()} disabled={isLoading}>Sign out</button>
             <button
@@ -873,6 +880,43 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         />
       )}
 
+      {profileDetailsOpen && (
+        <div className="account-modal-backdrop" role="presentation">
+          <div className="account-modal profile-detail-modal" role="dialog" aria-modal="true" aria-labelledby="profile-details-title">
+            <div className="account-modal-head">
+              <div>
+                <span className="hero-kicker">Your account</span>
+                <h2 id="profile-details-title">Profile details</h2>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setProfileDetailsOpen(false)}>×</button>
+            </div>
+
+            <div className="profile-details-view">
+              <div className="profile-details-avatar">
+                {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
+              </div>
+              <div className="profile-view-name">
+                <strong>{[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your profile"}</strong>
+                <span>{profile.email}</span>
+              </div>
+
+              <div className="profile-view-grid">
+                <div><span>First name</span><strong>{profile.firstName || "—"}</strong></div>
+                <div><span>Last name</span><strong>{profile.lastName || "—"}</strong></div>
+                <div><span>Date of birth</span><strong>{profile.dateOfBirth || "—"}</strong></div>
+                <div><span>Gender</span><strong>{profile.gender || "—"}</strong></div>
+                <div className="full"><span>Phone</span><strong>{profile.phoneNumber ? `${profile.phoneCountryCode} ${profile.phoneNumber}` : "—"}</strong></div>
+              </div>
+            </div>
+
+            <div className="account-modal-actions">
+              <button type="button" className="modal-secondary" onClick={() => setProfileDetailsOpen(false)}>Close</button>
+              <button type="button" className="modal-primary" onClick={openProfileEditor}>Edit profile</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {profileEditOpen && (
         <div className="account-modal-backdrop" role="presentation">
           <div className="account-modal profile-detail-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
@@ -916,8 +960,26 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               <label className="full">
                 Phone
                 <div className="profile-phone-row">
-                  <input value={profileDraft.phoneCountryCode} onChange={(event) => setProfileDraft({ ...profileDraft, phoneCountryCode: event.target.value })} placeholder="+91" />
-                  <input inputMode="numeric" value={profileDraft.phoneNumber} onChange={(event) => setProfileDraft({ ...profileDraft, phoneNumber: event.target.value.replace(/\D/g, "").slice(0, 15) })} placeholder="Phone number" />
+                  <select
+                    value={COUNTRY_CALLING_CODES.find((country) => country.dialCode === profileDraft.phoneCountryCode)?.iso2 ?? "IN"}
+                    onChange={(event) => {
+                      const country = COUNTRY_CALLING_CODES.find((item) => item.iso2 === event.target.value);
+                      setProfileDraft({ ...profileDraft, phoneCountryCode: country?.dialCode ?? "+91" });
+                    }}
+                    aria-label="Country calling code"
+                  >
+                    {COUNTRY_CALLING_CODES.map((country) => (
+                      <option key={country.iso2 + country.dialCode} value={country.iso2}>
+                        {country.name} ({country.dialCode})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    inputMode="numeric"
+                    value={profileDraft.phoneNumber}
+                    onChange={(event) => setProfileDraft({ ...profileDraft, phoneNumber: event.target.value.replace(/\D/g, "").slice(0, 15) })}
+                    placeholder="Phone number"
+                  />
                 </div>
               </label>
             </div>
