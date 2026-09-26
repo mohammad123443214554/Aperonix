@@ -61,7 +61,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [renameValue, setRenameValue] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
-  const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [profile, setProfile] = useState({
     firstName: "",
@@ -76,6 +75,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [profileDraft, setProfileDraft] = useState(profile);
   const [accountDeleteOpen, setAccountDeleteOpen] = useState(false);
   const [accountDeleteText, setAccountDeleteText] = useState("");
+  const [accountDeleteError, setAccountDeleteError] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -100,14 +100,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         if (mounted) {
           setProfile({
-
-            firstName: profileRow.first_name ?? "",
-            lastName: profileRow.last_name ?? "",
-            email: profileRow.email ?? user.email ?? "",
-            dateOfBirth: profileRow.date_of_birth ?? "",
-            gender: profileRow.gender ?? "",
-            phoneCountryCode: profileRow.phone_country_code ?? "+91",
-            phoneNumber: profileRow.phone_number ?? "",
+            firstName: profileRow?.first_name ?? "",
+            lastName: profileRow?.last_name ?? "",
+            email: profileRow?.email ?? user.email ?? "",
+            dateOfBirth: profileRow?.date_of_birth ?? "",
+            gender: profileRow?.gender ?? "",
+            phoneCountryCode: profileRow?.phone_country_code ?? "+91",
+            phoneNumber: profileRow?.phone_number ?? "",
             accountCreatedAt: user.created_at ?? ""
           });
         }
@@ -471,6 +470,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   async function deleteAccount() {
     if (accountDeleting || accountDeleteText !== "DELETE MY ACCOUNT") return;
 
+    setAccountDeleteError("");
     setAccountDeleting(true);
 
     try {
@@ -501,6 +501,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       window.location.href = "/";
     } catch (error) {
       console.error("Account deletion error:", error);
+      setAccountDeleteError(
+        error instanceof Error
+          ? error.message
+          : "Could not permanently delete the account."
+      );
       setAccountDeleting(false);
     }
   }
@@ -517,11 +522,30 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileDetailsOpen(false);
   }
 
-  function closeAccountScreens() {
-    setProfileDetailsOpen(false);
-    setProfileEditOpen(false);
-    setAccountDeleteOpen(false);
-    setAccountDeleteText("");
+  function updateProfileDob(part: "day" | "month" | "year", value: string) {
+    const parts = profileDraft.dateOfBirth
+      ? profileDraft.dateOfBirth.split("-")
+      : ["", "", ""];
+
+    let year = parts[0] || "";
+    let month = parts[1] || "";
+    let day = parts[2] || "";
+
+    if (part === "year") year = value;
+    if (part === "month") month = value.padStart(2, "0");
+    if (part === "day") day = value.padStart(2, "0");
+
+    if (year && month && day) {
+      setProfileDraft({
+        ...profileDraft,
+        dateOfBirth: `${year}-${month}-${day}`
+      });
+    } else {
+      setProfileDraft({
+        ...profileDraft,
+        dateOfBirth: `${year}-${month}-${day}`
+      });
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -784,6 +808,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               className="danger"
               onClick={() => {
                 setProfileOpen(false);
+                setAccountDeleteText("");
+                setAccountDeleteError("");
                 setAccountDeleteOpen(true);
               }}
             >
@@ -986,11 +1012,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   Day
                   <select
                     value={profileDraft.dateOfBirth ? String(Number(profileDraft.dateOfBirth.slice(8))) : ""}
-                    onChange={(event) => {
-                      const day = event.target.value;
-                      const [year, month] = profileDraft.dateOfBirth ? profileDraft.dateOfBirth.split("-") : ["", ""];
-                      if (day && year && month) setProfileDraft({ ...profileDraft, dateOfBirth: `${year}-${month}-${day.padStart(2, "0")}` });
-                    }}
+                    onChange={(event) => updateProfileDob("day", event.target.value)}
                   >
                     <option value="">Day</option>
                     {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <option key={day} value={day}>{day}</option>)}
@@ -1000,11 +1022,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   Month
                   <select
                     value={profileDraft.dateOfBirth ? String(Number(profileDraft.dateOfBirth.slice(5, 7))) : ""}
-                    onChange={(event) => {
-                      const month = event.target.value;
-                      const [year, , day] = profileDraft.dateOfBirth ? profileDraft.dateOfBirth.split("-") : ["", "", ""];
-                      if (month && year && day) setProfileDraft({ ...profileDraft, dateOfBirth: `${year}-${month.padStart(2, "0")}-${day}` });
-                    }}
+                    onChange={(event) => updateProfileDob("month", event.target.value)}
                   >
                     <option value="">Month</option>
                     {profileMonths.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
@@ -1014,11 +1032,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   Year
                   <select
                     value={profileDraft.dateOfBirth ? profileDraft.dateOfBirth.slice(0, 4) : ""}
-                    onChange={(event) => {
-                      const year = event.target.value;
-                      const [, month, day] = profileDraft.dateOfBirth ? profileDraft.dateOfBirth.split("-") : ["", "", ""];
-                      if (year && month && day) setProfileDraft({ ...profileDraft, dateOfBirth: `${year}-${month}-${day}` });
-                    }}
+                    onChange={(event) => updateProfileDob("year", event.target.value)}
                   >
                     <option value="">Year</option>
                     {profileYears().map((year) => <option key={year} value={year}>{year}</option>)}
@@ -1082,6 +1096,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             <h2 id="delete-account-title">Delete your account?</h2>
             <p>This permanently deletes your Aperonix account and its associated profile and chat data. This cannot be undone.</p>
             <p className="delete-confirm-instruction">Type <strong>DELETE MY ACCOUNT</strong> below to continue.</p>
+            {accountDeleteError && <div className="auth-error account-delete-error">{accountDeleteError}</div>}
             <input
               className="delete-confirm-input"
               value={accountDeleteText}
