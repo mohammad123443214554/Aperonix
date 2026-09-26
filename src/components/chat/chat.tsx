@@ -29,6 +29,16 @@ function makeTitle(content: string) {
   return cleaned.length > 38 ? `${cleaned.slice(0, 38)}…` : cleaned || "New chat";
 }
 
+const profileMonths = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+function profileYears() {
+  const current = new Date().getFullYear();
+  return Array.from({ length: current - 1899 }, (_, index) => current - index);
+}
+
 async function ensureAuthenticatedUser() {
   const { data, error } = await supabase.auth.getUser();
 
@@ -51,6 +61,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [renameValue, setRenameValue] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
+  const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [profile, setProfile] = useState({
     firstName: "",
@@ -59,10 +70,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     dateOfBirth: "",
     gender: "",
     phoneCountryCode: "+91",
-    phoneNumber: ""
+    phoneNumber: "",
+    accountCreatedAt: ""
   });
   const [profileDraft, setProfileDraft] = useState(profile);
   const [accountDeleteOpen, setAccountDeleteOpen] = useState(false);
+  const [accountDeleteText, setAccountDeleteText] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -85,15 +98,17 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           .eq("id", user.id)
           .maybeSingle();
 
-        if (profileRow && mounted) {
+        if (mounted) {
           setProfile({
+
             firstName: profileRow.first_name ?? "",
             lastName: profileRow.last_name ?? "",
             email: profileRow.email ?? user.email ?? "",
             dateOfBirth: profileRow.date_of_birth ?? "",
             gender: profileRow.gender ?? "",
             phoneCountryCode: profileRow.phone_country_code ?? "+91",
-            phoneNumber: profileRow.phone_number ?? ""
+            phoneNumber: profileRow.phone_number ?? "",
+            accountCreatedAt: user.created_at ?? ""
           });
         }
 
@@ -454,7 +469,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }
 
   async function deleteAccount() {
-    if (accountDeleting) return;
+    if (accountDeleting || accountDeleteText !== "DELETE MY ACCOUNT") return;
 
     setAccountDeleting(true);
 
@@ -499,6 +514,14 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileDraft(profile);
     setProfileEditOpen(true);
     setProfileOpen(false);
+    setProfileDetailsOpen(false);
+  }
+
+  function closeAccountScreens() {
+    setProfileDetailsOpen(false);
+    setProfileEditOpen(false);
+    setAccountDeleteOpen(false);
+    setAccountDeleteText("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -881,128 +904,201 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       )}
 
       {profileDetailsOpen && (
-        <div className="account-modal-backdrop" role="presentation">
-          <div className="account-modal profile-detail-modal" role="dialog" aria-modal="true" aria-labelledby="profile-details-title">
-            <div className="account-modal-head">
-              <div>
-                <span className="hero-kicker">Your account</span>
-                <h2 id="profile-details-title">Profile details</h2>
-              </div>
-              <button type="button" className="modal-close" onClick={() => setProfileDetailsOpen(false)}>×</button>
-            </div>
+        <section className="account-page-overlay">
+          <div className="account-page-header">
+            <button type="button" className="account-page-back" onClick={() => setProfileDetailsOpen(false)}>
+              <span>←</span> Back
+            </button>
+            <span className="account-page-title">Profile</span>
+          </div>
 
-            <div className="profile-details-view">
+          <div className="account-page-content">
+            <div className="account-hero-card">
               <div className="profile-details-avatar">
                 {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
               </div>
-              <div className="profile-view-name">
-                <strong>{[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your profile"}</strong>
-                <span>{profile.email}</span>
+              <div>
+                <div className="account-eyebrow">APERONIX ACCOUNT</div>
+                <h1>{[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your profile"}</h1>
+                <p>{profile.email}</p>
+              </div>
+            </div>
+
+            <div className="account-section-card">
+              <div className="account-section-heading">
+                <div>
+                  <span className="hero-kicker">Account information</span>
+                  <h2>Your details</h2>
+                </div>
+                <button type="button" className="modal-primary" onClick={openProfileEditor}>Edit profile</button>
               </div>
 
-              <div className="profile-view-grid">
+              <div className="profile-view-grid account-view-grid">
                 <div><span>First name</span><strong>{profile.firstName || "—"}</strong></div>
                 <div><span>Last name</span><strong>{profile.lastName || "—"}</strong></div>
+                <div><span>Email</span><strong>{profile.email || "—"}</strong></div>
                 <div><span>Date of birth</span><strong>{profile.dateOfBirth || "—"}</strong></div>
                 <div><span>Gender</span><strong>{profile.gender || "—"}</strong></div>
-                <div className="full"><span>Phone</span><strong>{profile.phoneNumber ? `${profile.phoneCountryCode} ${profile.phoneNumber}` : "—"}</strong></div>
+                <div><span>Phone</span><strong>{profile.phoneNumber ? `${profile.phoneCountryCode} ${profile.phoneNumber}` : "—"}</strong></div>
+                <div className="full"><span>Account created</span><strong>{profile.accountCreatedAt ? new Date(profile.accountCreatedAt).toLocaleString() : "—"}</strong></div>
               </div>
             </div>
-
-            <div className="account-modal-actions">
-              <button type="button" className="modal-secondary" onClick={() => setProfileDetailsOpen(false)}>Close</button>
-              <button type="button" className="modal-primary" onClick={openProfileEditor}>Edit profile</button>
-            </div>
           </div>
-        </div>
+        </section>
       )}
 
       {profileEditOpen && (
-        <div className="account-modal-backdrop" role="presentation">
-          <div className="account-modal profile-detail-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
-            <div className="account-modal-head">
-              <div>
-                <span className="hero-kicker">Your account</span>
-                <h2 id="profile-title">Profile details</h2>
-              </div>
-              <button type="button" className="modal-close" onClick={() => setProfileEditOpen(false)}>×</button>
-            </div>
+        <section className="account-page-overlay">
+          <div className="account-page-header">
+            <button type="button" className="account-page-back" onClick={() => setProfileEditOpen(false)}>
+              <span>←</span> Back
+            </button>
+            <span className="account-page-title">Edit profile</span>
+          </div>
 
-            <div className="profile-details-grid">
-              <label>
-                First name
-                <input value={profileDraft.firstName} onChange={(event) => setProfileDraft({ ...profileDraft, firstName: event.target.value })} />
-              </label>
-              <label>
-                Last name
-                <input value={profileDraft.lastName} onChange={(event) => setProfileDraft({ ...profileDraft, lastName: event.target.value })} />
-              </label>
-              <label className="full">
-                Email
-                <input value={profile.email} readOnly />
-                <small>Account email cannot be edited here.</small>
-              </label>
-              <label>
-                Date of birth
-                <input type="date" value={profileDraft.dateOfBirth} onChange={(event) => setProfileDraft({ ...profileDraft, dateOfBirth: event.target.value })} />
-              </label>
-              <label>
-                Gender
-                <select value={profileDraft.gender} onChange={(event) => setProfileDraft({ ...profileDraft, gender: event.target.value })}>
-                  <option value="">Not set</option>
-                  <option>Female</option>
-                  <option>Male</option>
-                  <option>Non-binary</option>
-                  <option>Other</option>
-                  <option>Prefer not to say</option>
-                </select>
-              </label>
-              <label className="full">
-                Phone
-                <div className="profile-phone-row">
-                  <select
-                    value={COUNTRY_CALLING_CODES.find((country) => country.dialCode === profileDraft.phoneCountryCode)?.iso2 ?? "IN"}
-                    onChange={(event) => {
-                      const country = COUNTRY_CALLING_CODES.find((item) => item.iso2 === event.target.value);
-                      setProfileDraft({ ...profileDraft, phoneCountryCode: country?.dialCode ?? "+91" });
-                    }}
-                    aria-label="Country calling code"
-                  >
-                    {COUNTRY_CALLING_CODES.map((country) => (
-                      <option key={country.iso2 + country.dialCode} value={country.iso2}>
-                        {country.name} ({country.dialCode})
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    inputMode="numeric"
-                    value={profileDraft.phoneNumber}
-                    onChange={(event) => setProfileDraft({ ...profileDraft, phoneNumber: event.target.value.replace(/\D/g, "").slice(0, 15) })}
-                    placeholder="Phone number"
-                  />
+          <div className="account-page-content">
+            <div className="account-section-card edit-account-card">
+              <div className="account-section-heading">
+                <div>
+                  <span className="hero-kicker">Manage your details</span>
+                  <h2>Edit profile</h2>
+                  <p className="account-section-note">Your account email cannot be changed here.</p>
                 </div>
-              </label>
-            </div>
+              </div>
 
-            <div className="account-modal-actions">
-              <button type="button" className="modal-secondary" onClick={() => setProfileEditOpen(false)}>Cancel</button>
-              <button type="button" className="modal-primary" onClick={() => void saveProfile()} disabled={profileSaving}>
-                {profileSaving ? "Saving..." : "Save changes"}
-              </button>
+              <div className="profile-details-grid">
+                <label>
+                  First name
+                  <input value={profileDraft.firstName} onChange={(event) => setProfileDraft({ ...profileDraft, firstName: event.target.value })} autoComplete="given-name" />
+                </label>
+                <label>
+                  Last name
+                  <input value={profileDraft.lastName} onChange={(event) => setProfileDraft({ ...profileDraft, lastName: event.target.value })} autoComplete="family-name" />
+                </label>
+
+                <label className="full">
+                  Email
+                  <input value={profile.email} readOnly />
+                  <small>This email is linked to your login.</small>
+                </label>
+
+                <label>
+                  Day
+                  <select
+                    value={profileDraft.dateOfBirth ? String(Number(profileDraft.dateOfBirth.slice(8))) : ""}
+                    onChange={(event) => {
+                      const day = event.target.value;
+                      const [year, month] = profileDraft.dateOfBirth ? profileDraft.dateOfBirth.split("-") : ["", ""];
+                      if (day && year && month) setProfileDraft({ ...profileDraft, dateOfBirth: `${year}-${month}-${day.padStart(2, "0")}` });
+                    }}
+                  >
+                    <option value="">Day</option>
+                    {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <option key={day} value={day}>{day}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Month
+                  <select
+                    value={profileDraft.dateOfBirth ? String(Number(profileDraft.dateOfBirth.slice(5, 7))) : ""}
+                    onChange={(event) => {
+                      const month = event.target.value;
+                      const [year, , day] = profileDraft.dateOfBirth ? profileDraft.dateOfBirth.split("-") : ["", "", ""];
+                      if (month && year && day) setProfileDraft({ ...profileDraft, dateOfBirth: `${year}-${month.padStart(2, "0")}-${day}` });
+                    }}
+                  >
+                    <option value="">Month</option>
+                    {profileMonths.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Year
+                  <select
+                    value={profileDraft.dateOfBirth ? profileDraft.dateOfBirth.slice(0, 4) : ""}
+                    onChange={(event) => {
+                      const year = event.target.value;
+                      const [, month, day] = profileDraft.dateOfBirth ? profileDraft.dateOfBirth.split("-") : ["", "", ""];
+                      if (year && month && day) setProfileDraft({ ...profileDraft, dateOfBirth: `${year}-${month}-${day}` });
+                    }}
+                  >
+                    <option value="">Year</option>
+                    {profileYears().map((year) => <option key={year} value={year}>{year}</option>)}
+                  </select>
+                </label>
+
+                <label>
+                  Gender
+                  <select value={profileDraft.gender} onChange={(event) => setProfileDraft({ ...profileDraft, gender: event.target.value })}>
+                    <option value="">Select gender</option>
+                    <option>Female</option>
+                    <option>Male</option>
+                    <option>Non-binary</option>
+                    <option>Other</option>
+                    <option>Prefer not to say</option>
+                  </select>
+                </label>
+
+                <label className="full">
+                  Phone number
+                  <div className="profile-phone-row">
+                    <select
+                      value={COUNTRY_CALLING_CODES.find((country) => country.dialCode === profileDraft.phoneCountryCode)?.iso2 ?? "IN"}
+                      onChange={(event) => {
+                        const country = COUNTRY_CALLING_CODES.find((item) => item.iso2 === event.target.value);
+                        setProfileDraft({ ...profileDraft, phoneCountryCode: country?.dialCode ?? "+91" });
+                      }}
+                      aria-label="Country calling code"
+                    >
+                      {COUNTRY_CALLING_CODES.map((country) => (
+                        <option key={country.iso2 + country.dialCode} value={country.iso2}>
+                          {country.name} ({country.dialCode})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      inputMode="numeric"
+                      value={profileDraft.phoneNumber}
+                      onChange={(event) => setProfileDraft({ ...profileDraft, phoneNumber: event.target.value.replace(/\D/g, "").slice(0, 15) })}
+                      placeholder="Phone number"
+                    />
+                  </div>
+                </label>
+              </div>
+
+              <div className="account-modal-actions">
+                <button type="button" className="modal-secondary" onClick={() => setProfileEditOpen(false)}>Cancel</button>
+                <button type="button" className="modal-primary" onClick={() => void saveProfile()} disabled={profileSaving}>
+                  {profileSaving ? "Saving..." : "Save changes"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {accountDeleteOpen && (
-        <div className="account-modal-backdrop" role="presentation">
-          <div className="account-modal danger-modal" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+        <div className="account-modal-backdrop account-delete-backdrop" role="presentation">
+          <div className="account-modal danger-modal account-delete-confirm" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
             <div className="danger-icon">!</div>
             <h2 id="delete-account-title">Delete your account?</h2>
-            <p>This permanently removes your Aperonix account, chats, profile data and access. This action cannot be undone.</p>
+            <p>This permanently deletes your Aperonix account and its associated profile and chat data. This cannot be undone.</p>
+            <p className="delete-confirm-instruction">Type <strong>DELETE MY ACCOUNT</strong> below to continue.</p>
+            <input
+              className="delete-confirm-input"
+              value={accountDeleteText}
+              onChange={(event) => setAccountDeleteText(event.target.value)}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              placeholder="DELETE MY ACCOUNT"
+            />
             <div className="account-modal-actions">
-              <button type="button" className="modal-secondary" onClick={() => setAccountDeleteOpen(false)} disabled={accountDeleting}>Cancel</button>
-              <button type="button" className="modal-danger" onClick={() => void deleteAccount()} disabled={accountDeleting}>
+              <button type="button" className="modal-secondary" onClick={() => { setAccountDeleteOpen(false); setAccountDeleteText(""); }} disabled={accountDeleting}>Cancel</button>
+              <button
+                type="button"
+                className="modal-danger"
+                onClick={() => void deleteAccount()}
+                disabled={accountDeleting || accountDeleteText !== "DELETE MY ACCOUNT"}
+              >
                 {accountDeleting ? "Deleting..." : "Delete permanently"}
               </button>
             </div>
