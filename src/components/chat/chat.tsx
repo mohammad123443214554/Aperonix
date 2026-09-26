@@ -48,6 +48,21 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [deleteSession, setDeleteSession] = useState<ChatSession | null>(null);
   const [renameSession, setRenameSession] = useState<ChatSession | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [profile, setProfile] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    dateOfBirth: "",
+    gender: "",
+    phoneCountryCode: "+91",
+    phoneNumber: ""
+  });
+  const [profileDraft, setProfileDraft] = useState(profile);
+  const [accountDeleteOpen, setAccountDeleteOpen] = useState(false);
+  const [accountDeleting, setAccountDeleting] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,6 +76,24 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           { id: user.id },
           { onConflict: "id" }
         );
+
+        const { data: profileRow } = await supabase
+          .from("profiles")
+          .select("first_name,last_name,email,date_of_birth,gender,phone_country_code,phone_number")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (profileRow && mounted) {
+          setProfile({
+            firstName: profileRow.first_name ?? "",
+            lastName: profileRow.last_name ?? "",
+            email: profileRow.email ?? user.email ?? "",
+            dateOfBirth: profileRow.date_of_birth ?? "",
+            gender: profileRow.gender ?? "",
+            phoneCountryCode: profileRow.phone_country_code ?? "+91",
+            phoneNumber: profileRow.phone_number ?? ""
+          });
+        }
 
         const { data: chats, error: chatsError } = await supabase
           .from("chat_sessions")
@@ -364,6 +397,103 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  async function saveProfile() {
+    if (profileSaving) return;
+
+    setProfileSaving(true);
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData.user) {
+      setProfileSaving(false);
+      return;
+    }
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        first_name: profileDraft.firstName.trim(),
+        last_name: profileDraft.lastName.trim(),
+        date_of_birth: profileDraft.dateOfBirth || null,
+        gender: profileDraft.gender || null,
+        phone_country_code: profileDraft.phoneCountryCode || "+91",
+        phone_number: profileDraft.phoneNumber.replace(/\D/g, "")
+      })
+      .eq("id", userData.user.id);
+
+    if (profileError) {
+      console.error("Profile update error:", profileError);
+      setProfileSaving(false);
+      return;
+    }
+
+    const { error: metadataError } = await supabase.auth.updateUser({
+      data: {
+        first_name: profileDraft.firstName.trim(),
+        last_name: profileDraft.lastName.trim(),
+        date_of_birth: profileDraft.dateOfBirth || null,
+        gender: profileDraft.gender || null,
+        phone_country_code: profileDraft.phoneCountryCode || "+91",
+        phone_number: profileDraft.phoneNumber.replace(/\D/g, "")
+      }
+    });
+
+    if (metadataError) {
+      console.error("Profile metadata update error:", metadataError);
+    }
+
+    setProfile({
+      ...profileDraft,
+      firstName: profileDraft.firstName.trim(),
+      lastName: profileDraft.lastName.trim(),
+      phoneNumber: profileDraft.phoneNumber.replace(/\D/g, "")
+    });
+    setProfileSaving(false);
+    setProfileEditOpen(false);
+  }
+
+  async function deleteAccount() {
+    if (accountDeleting) return;
+
+    setAccountDeleting(true);
+
+    try {
+      let { data: sessionData } = await supabase.auth.getSession();
+
+      if (!sessionData.session) {
+        const refreshed = await supabase.auth.refreshSession();
+        sessionData = refreshed.data;
+      }
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Your session has expired.");
+
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Could not delete the account.");
+      }
+
+      await supabase.auth.signOut();
+      window.location.href = "/";
+    } catch (error) {
+      console.error("Account deletion error:", error);
+      setAccountDeleting(false);
+    }
+  }
+
+  function openProfileEditor() {
+    setProfileDraft(profile);
+    setProfileEditOpen(true);
+    setProfileOpen(false);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -589,17 +719,48 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           </div>
         </div>
 
-        <div className="sidebar-footer">
-          <span>Aperonix AI</span>
-          <button
-            type="button"
-            className="sign-out-button"
-            onClick={() => void onSignOut()}
-            disabled={isLoading}
-          >
-            Sign out
-          </button>
-        </div>
+        <button
+          type="button"
+          className="profile-trigger"
+          onClick={() => setProfileOpen((current) => !current)}
+          aria-expanded={profileOpen}
+        >
+          <span className="profile-avatar">
+            {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
+          </span>
+          <span className="profile-summary">
+            <strong>{[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your profile"}</strong>
+            <small>{profile.email || "Account"}</small>
+          </span>
+          <span className="profile-chevron">›</span>
+        </button>
+
+        {profileOpen && (
+          <div className="profile-popover" role="dialog" aria-label="Profile">
+            <div className="profile-popover-head">
+              <span className="profile-avatar large">
+                {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
+              </span>
+              <div>
+                <strong>{[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your profile"}</strong>
+                <small>{profile.email}</small>
+              </div>
+            </div>
+            <button type="button" onClick={() => setProfileOpen(false)}>Profile details</button>
+            <button type="button" onClick={openProfileEditor}>Edit profile</button>
+            <button type="button" onClick={() => void onSignOut()} disabled={isLoading}>Sign out</button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                setProfileOpen(false);
+                setAccountDeleteOpen(true);
+              }}
+            >
+              Delete account
+            </button>
+          </div>
+        )}
       </aside>
 
       {isSidebarOpen && (
@@ -702,6 +863,90 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           </p>
         </div>
       </section>
+
+      {profileOpen && (
+        <button
+          className="profile-screen-backdrop"
+          type="button"
+          aria-label="Close profile menu"
+          onClick={() => setProfileOpen(false)}
+        />
+      )}
+
+      {profileEditOpen && (
+        <div className="account-modal-backdrop" role="presentation">
+          <div className="account-modal profile-detail-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+            <div className="account-modal-head">
+              <div>
+                <span className="hero-kicker">Your account</span>
+                <h2 id="profile-title">Profile details</h2>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setProfileEditOpen(false)}>×</button>
+            </div>
+
+            <div className="profile-details-grid">
+              <label>
+                First name
+                <input value={profileDraft.firstName} onChange={(event) => setProfileDraft({ ...profileDraft, firstName: event.target.value })} />
+              </label>
+              <label>
+                Last name
+                <input value={profileDraft.lastName} onChange={(event) => setProfileDraft({ ...profileDraft, lastName: event.target.value })} />
+              </label>
+              <label className="full">
+                Email
+                <input value={profile.email} readOnly />
+                <small>Account email cannot be edited here.</small>
+              </label>
+              <label>
+                Date of birth
+                <input type="date" value={profileDraft.dateOfBirth} onChange={(event) => setProfileDraft({ ...profileDraft, dateOfBirth: event.target.value })} />
+              </label>
+              <label>
+                Gender
+                <select value={profileDraft.gender} onChange={(event) => setProfileDraft({ ...profileDraft, gender: event.target.value })}>
+                  <option value="">Not set</option>
+                  <option>Female</option>
+                  <option>Male</option>
+                  <option>Non-binary</option>
+                  <option>Other</option>
+                  <option>Prefer not to say</option>
+                </select>
+              </label>
+              <label className="full">
+                Phone
+                <div className="profile-phone-row">
+                  <input value={profileDraft.phoneCountryCode} onChange={(event) => setProfileDraft({ ...profileDraft, phoneCountryCode: event.target.value })} placeholder="+91" />
+                  <input inputMode="numeric" value={profileDraft.phoneNumber} onChange={(event) => setProfileDraft({ ...profileDraft, phoneNumber: event.target.value.replace(/\D/g, "").slice(0, 15) })} placeholder="Phone number" />
+                </div>
+              </label>
+            </div>
+
+            <div className="account-modal-actions">
+              <button type="button" className="modal-secondary" onClick={() => setProfileEditOpen(false)}>Cancel</button>
+              <button type="button" className="modal-primary" onClick={() => void saveProfile()} disabled={profileSaving}>
+                {profileSaving ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {accountDeleteOpen && (
+        <div className="account-modal-backdrop" role="presentation">
+          <div className="account-modal danger-modal" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+            <div className="danger-icon">!</div>
+            <h2 id="delete-account-title">Delete your account?</h2>
+            <p>This permanently removes your Aperonix account, chats, profile data and access. This action cannot be undone.</p>
+            <div className="account-modal-actions">
+              <button type="button" className="modal-secondary" onClick={() => setAccountDeleteOpen(false)} disabled={accountDeleting}>Cancel</button>
+              <button type="button" className="modal-danger" onClick={() => void deleteAccount()} disabled={accountDeleting}>
+                {accountDeleting ? "Deleting..." : "Delete permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteSession && (
         <div className="chat-modal-backdrop" role="presentation" onClick={() => setDeleteSession(null)}>
