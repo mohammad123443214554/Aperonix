@@ -55,7 +55,6 @@ export default function AuthExperience() {
   const [screen, setScreen] = useState<Screen>("landing");
   const [sessionLoading, setSessionLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
-  const [scrolled, setScrolled] = useState(0);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -101,20 +100,9 @@ export default function AuthExperience() {
       }
     });
 
-    const onScroll = () => {
-      const max = Math.max(
-        document.documentElement.scrollHeight - window.innerHeight,
-        1
-      );
-      setScrolled(Math.min(window.scrollY / max, 1));
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-
     return () => {
       mounted = false;
       data.subscription.unsubscribe();
-      window.removeEventListener("scroll", onScroll);
     };
   }, []);
 
@@ -250,73 +238,63 @@ export default function AuthExperience() {
     return <Chat onSignOut={signOut} />;
   }
 
-  const iconShift = (index: number) => {
-    const center = index - (iconItems.length - 1) / 2;
-    const depth = Math.abs(center);
-    const x = center * 156;
-    const baseY = 118 + depth * 11;
-    const scrollX = scrolled * center * 28;
-    const scrollY = scrolled * (index % 2 ? -42 : 46);
-    const rotateY = center * -4;
-    const rotateZ = center * 1.2;
-
-    return {
-      transform: `translate3d(${x + scrollX}px, ${baseY + scrollY}px, ${95 - depth * 22}px) rotateX(${6 + scrolled * 8}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`
-    };
-  };
-
   if (screen === "landing") {
     return (
       <main className="auth-landing">
-        <div className="landing-orb orb-one" />
-        <div className="landing-orb orb-two" />
-
         <header className="landing-nav">
           <div className="landing-brand">
             <img src="/aperonix-logo.png" alt="Aperonix AI" />
             <span>Aperonix AI</span>
           </div>
-          <button type="button" className="nav-signin" onClick={() => resetErrorAnd("signin")}>
+
+          <button
+            type="button"
+            className="nav-signin"
+            onClick={() => resetErrorAnd("signin")}
+          >
             Sign in
           </button>
         </header>
 
-        <section className="landing-hero">
+        <section className="landing-hero landing-hero-simple">
           <div className="hero-copy">
-            <span className="hero-kicker">One AI space for your ideas</span>
-            <h1>Think, create, code and learn with Aperonix AI.</h1>
+            <img
+              className="landing-main-logo"
+              src="/aperonix-logo.png"
+              alt="Aperonix AI"
+            />
+            <span className="hero-kicker">A professional AI workspace</span>
+            <h1>Think clearly. Create freely.</h1>
             <p>
-              A professional AI workspace designed to grow with you — from everyday
-              questions to coding, research, creation and deeper thinking.
+              Aperonix AI brings coding, research, learning and creative work
+              together in one focused workspace.
             </p>
-            <button type="button" className="get-started" onClick={() => resetErrorAnd("choice")}>
-              Get Started <span>→</span>
-            </button>
-          </div>
 
-          <div className="three-d-scene" aria-hidden="true">
-            <div className="scene-grid" />
-            <div className="scene-core">
-              <div className="core-ring ring-a" />
-              <div className="core-ring ring-b" />
-              <img src="/aperonix-logo.png" alt="" />
+            <div className="landing-actions">
+              <button
+                type="button"
+                className="get-started"
+                onClick={() => resetErrorAnd("choice")}
+              >
+                Get Started
+                <span>→</span>
+              </button>
+
+              <button
+                type="button"
+                className="landing-secondary-button"
+                onClick={() => resetErrorAnd("signin")}
+              >
+                Sign in
+              </button>
             </div>
 
-            {iconItems.map((item, index) => (
-              <div key={item.label} className="floating-tool" style={iconShift(index)}>
-                <div className="tool-face">
-                  <span className="tool-symbol">{item.symbol}</span>
-                  <span className="tool-label">{item.label}</span>
-                </div>
-              </div>
-            ))}
+            <div className="landing-trust-row">
+              <span>Secure account</span>
+              <i />
+              <span>Your conversations stay with your account</span>
+            </div>
           </div>
-        </section>
-
-        <section className="landing-scroll-hint">
-          <span>Scroll</span>
-          <div className="scroll-line"><i /></div>
-          <span>Explore the Aperonix space</span>
         </section>
       </main>
     );
