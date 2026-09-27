@@ -2279,3 +2279,66 @@ body {
     0 0 23px rgba(77,246,255,.05),
     0 0 24px rgba(255,59,189,.035);
 }
+
+
+/* Dark native dropdowns */
+.auth-form select,
+.profile-details-grid select {
+  color-scheme: dark;
+  appearance: auto;
+  background-color: #040d1d;
+  color: #edf5ff;
+}
+
+.auth-form select option,
+.profile-details-grid select option {
+  background: #061124;
+  color: #edf5ff;
+}
+
+.auth-form select:focus,
+.profile-details-grid select:focus {
+  color-scheme: dark;
+}
+
+/* Consistent neon sweep on primary auth actions */
+.auth-card .get-started::after,
+.landing-actions .get-started::after {
+  content: "";
+  position: absolute;
+  width: 34%;
+  height: 190%;
+  top: -45%;
+  left: -58%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent);
+  opacity: .95;
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.auth-card .get-started:hover:not(:disabled)::after,
+.landing-actions .get-started:hover:not(:disabled)::after {
+  transform: translateX(410%) rotate(18deg);
+}
+
+.auth-card .get-started:active:not(:disabled)::after,
+.landing-actions .get-started:active:not(:disabled)::after {
+  transform: translateX(470%) rotate(18deg);
+}
+
+.auth-card .get-started:focus-visible,
+.landing-actions .get-started:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(77,246,255,.12),
+    0 0 20px rgba(77,246,255,.12),
+    0 0 24px rgba(255,59,189,.08),
+    0 8px 22px rgba(0,0,0,.24);
+}
+
+@media (forced-colors: active) {
+  .auth-form select,
+  .profile-details-grid select {
+    color-scheme: dark;
+  }
+}
