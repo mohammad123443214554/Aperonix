@@ -3619,3 +3619,49 @@ body {
 .history-section-chevron path {
   stroke-width: 2.5;
 }
+
+
+/* Empty chat welcome — centered until the first user message. */
+.empty-chat-welcome {
+  min-height: min(62vh, 560px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px 140px;
+  text-align: center;
+}
+
+.empty-chat-logo {
+  width: 68px;
+  height: 68px;
+  object-fit: contain;
+  margin-bottom: 18px;
+  filter:
+    drop-shadow(0 0 12px rgba(77,246,255,.11))
+    drop-shadow(0 0 13px rgba(255,59,189,.09));
+}
+
+.empty-chat-greeting {
+  margin: 0;
+  color: #eef5ff;
+  font-size: clamp(19px, 2vw, 24px);
+  font-weight: 650;
+  letter-spacing: -.02em;
+}
+
+@media (max-width: 700px) {
+  .empty-chat-welcome {
+    min-height: 58vh;
+    padding-bottom: 130px;
+  }
+
+  .empty-chat-logo {
+    width: 58px;
+    height: 58px;
+  }
+
+  .empty-chat-greeting {
+    font-size: 18px;
+  }
+}
