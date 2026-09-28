@@ -2592,3 +2592,58 @@ body {
     padding-bottom: 9px;
   }
 }
+
+
+/* Reuse the signature Aperonix shine animation on New Chat and composer. */
+.new-chat-sidebar,
+.composer {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.new-chat-sidebar::after,
+.composer::after {
+  content: "";
+  position: absolute;
+  width: 30%;
+  height: 180%;
+  top: -40%;
+  left: -56%;
+  z-index: 0;
+  transform: rotate(18deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,.21),
+    transparent
+  );
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.new-chat-sidebar > *,
+.composer > * {
+  position: relative;
+  z-index: 1;
+}
+
+.new-chat-sidebar:hover:not(:disabled)::after,
+.composer:hover::after,
+.composer:focus-within::after {
+  transform: translateX(430%) rotate(18deg);
+}
+
+.new-chat-sidebar:active:not(:disabled)::after {
+  transform: translateX(470%) rotate(18deg);
+}
+
+.composer::after {
+  opacity: .9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .new-chat-sidebar::after,
+  .composer::after {
+    display: none;
+  }
+}
