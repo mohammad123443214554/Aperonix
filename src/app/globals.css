@@ -2658,3 +2658,49 @@ body {
 .composer:focus-within::after {
   transform: none !important;
 }
+
+
+/* Long-prompt composer behavior: text grows upward, send stays anchored at bottom-right. */
+.composer {
+  align-items: flex-end;
+  min-height: 58px;
+  max-height: 174px;
+  box-sizing: border-box;
+}
+
+.composer textarea {
+  align-self: flex-end;
+  min-height: 42px;
+  max-height: 156px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.composer textarea::-webkit-scrollbar {
+  width: 5px;
+}
+
+.composer textarea::-webkit-scrollbar-thumb {
+  background: rgba(115, 160, 216, .28);
+  border-radius: 999px;
+}
+
+.composer .send-button {
+  align-self: flex-end;
+  flex: 0 0 44px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .composer {
+    max-height: 168px;
+  }
+
+  .composer textarea {
+    max-height: 150px;
+  }
+}
