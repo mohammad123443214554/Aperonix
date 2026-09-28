@@ -434,18 +434,34 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           content: message.content
         }));
 
+      let copiedRows: Array<{ id: string; created_at: string }> = [];
+
       if (messagesToCopy.length > 0) {
-        const { error: messageError } = await supabase
+        const { data: insertedRows, error: messageError } = await supabase
           .from("chat_messages")
-          .insert(messagesToCopy);
+          .insert(messagesToCopy)
+          .select("id,created_at");
 
         if (messageError) throw messageError;
+        copiedRows = insertedRows ?? [];
       }
+
+      let copiedIndex = 0;
+      const duplicatedMessages = session.messages.map((message) => {
+        if (message.role === "system") return message;
+
+        const copiedRow = copiedRows[copiedIndex++];
+        return {
+          ...message,
+          id: copiedRow?.id,
+          createdAt: copiedRow ? new Date(copiedRow.created_at).getTime() : message.createdAt
+        };
+      });
 
       const duplicate: ChatSession = {
         id: copy.id,
         title: copy.title,
-        messages: session.messages,
+        messages: duplicatedMessages,
         createdAt: new Date(copy.created_at).getTime(),
         updatedAt: new Date(copy.updated_at).getTime(),
         isPinned: false
