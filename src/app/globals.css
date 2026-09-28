@@ -2491,3 +2491,104 @@ body {
 .auth-choice-card .auth-neon-button + .auth-neon-button {
   margin-top: 12px;
 }
+
+
+/* Match New Chat and composer to the Aperonix neon-glass signature */
+.new-chat-sidebar {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 50%, var(--aperonix-magenta)) border-box;
+  color: #f4fbff;
+  box-shadow:
+    0 0 15px rgba(77,246,255,.08),
+    0 0 18px rgba(255,59,189,.04),
+    inset 0 1px rgba(255,255,255,.05);
+}
+
+.new-chat-sidebar:hover:not(:disabled) {
+  background:
+    linear-gradient(#0a1c33, #0a1c33) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 50%, var(--aperonix-magenta)) border-box;
+  box-shadow:
+    0 0 19px rgba(77,246,255,.13),
+    0 0 25px rgba(255,59,189,.08),
+    0 10px 24px rgba(0,0,0,.18);
+}
+
+.new-chat-sidebar:active:not(:disabled) {
+  transform: translateY(0) scale(.99);
+}
+
+.new-chat-sidebar .new-chat-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Simplify the textarea surface so it does not create a second inner box. */
+.composer {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 7px 8px 7px 17px;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(105deg, var(--aperonix-cyan), var(--aperonix-blue) 50%, var(--aperonix-magenta)) border-box;
+  box-shadow:
+    0 0 16px rgba(77,246,255,.07),
+    0 0 20px rgba(255,59,189,.04),
+    inset 0 1px rgba(255,255,255,.04);
+}
+
+.composer:focus-within {
+  box-shadow:
+    0 0 19px rgba(77,246,255,.10),
+    0 0 24px rgba(255,59,189,.06),
+    0 12px 34px rgba(0,0,0,.22),
+    inset 0 1px rgba(255,255,255,.05);
+}
+
+.composer textarea {
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  padding: 10px 4px 10px 0;
+  color: #edf5ff;
+}
+
+.composer textarea:focus {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.composer textarea::placeholder {
+  color: #7890ae;
+}
+
+.send-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  margin-left: 6px;
+  flex: 0 0 44px;
+}
+
+@media (max-width: 600px) {
+  .new-chat-sidebar {
+    min-height: 46px;
+  }
+
+  .composer {
+    padding-left: 14px;
+  }
+
+  .composer textarea {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+}
