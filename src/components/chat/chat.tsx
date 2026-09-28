@@ -774,7 +774,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           </div>
         </div>
 
-        <div className="profile-trigger profile-static">
+        <button
+          type="button"
+          className="profile-trigger"
+          onClick={() => setProfileOpen((current) => !current)}
+          aria-expanded={profileOpen}
+        >
           <span className="profile-avatar">
             {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
           </span>
@@ -783,9 +788,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             <small>{profile.email || "Account"}</small>
           </span>
           <span className="profile-chevron">›</span>
-        </div>
+        </button>
 
-        <div className="profile-popover" role="region" aria-label="Profile actions">
+        {profileOpen && (
+          <div className="profile-popover" role="dialog" aria-label="Profile actions">
             <div className="profile-popover-head">
               <span className="profile-avatar large">
                 {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
@@ -917,15 +923,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           </p>
         </div>
       </section>
-
-      {profileOpen && (
-        <button
-          className="profile-screen-backdrop"
-          type="button"
-          aria-label="Close profile menu"
-          onClick={() => setProfileOpen(false)}
-        />
-      )}
 
       {profileDetailsOpen && (
         <section className="account-page-overlay">
