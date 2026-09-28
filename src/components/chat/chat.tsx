@@ -65,6 +65,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pinFlashId, setPinFlashId] = useState<string | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
   const [isRecentSectionOpen, setIsRecentSectionOpen] = useState(true);
   const [deleteSession, setDeleteSession] = useState<ChatSession | null>(null);
@@ -133,6 +134,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         const chatIds = (chats ?? []).map((chat) => chat.id);
         let messageRows: Array<{
+          id: string;
           chat_id: string;
           role: ChatMessage["role"];
           content: string;
@@ -142,7 +144,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         if (chatIds.length > 0) {
           const { data: rows, error: messagesError } = await supabase
             .from("chat_messages")
-            .select("chat_id,role,content,created_at")
+            .select("id,chat_id,role,content,created_at")
             .in("chat_id", chatIds)
             .order("created_at", { ascending: true });
 
@@ -155,7 +157,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           title: chat.title,
           messages: messageRows
             .filter((message) => message.chat_id === chat.id)
-            .map(({ role, content }) => ({ role, content })),
+            .map(({ id, role, content, created_at }) => ({
+              id,
+              role,
+              content,
+              createdAt: new Date(created_at).getTime()
+            })),
           createdAt: new Date(chat.created_at).getTime(),
           updatedAt: new Date(chat.updated_at).getTime(),
           isPinned: Boolean(chat.is_pinned)
@@ -562,6 +569,115 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  async function copyMessage(message: ChatMessage) {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      const key = message.id ?? `copy-${message.content.slice(0, 24)}`;
+      setCopiedMessageId(key);
+      window.setTimeout(() => {
+        setCopiedMessageId((current) => (current === key ? null : current));
+      }, 1400);
+    } catch (error) {
+      console.error("Copy message error:", error);
+    }
+  }
+
+  async function retryMessage(messageIndex: number) {
+    if (isLoading || !activeSession) return;
+
+    const assistant = activeSession.messages[messageIndex];
+    const previousUserIndex = activeSession.messages
+      .slice(0, messageIndex)
+      .map((message) => message.role)
+      .lastIndexOf("user");
+
+    if (!assistant || assistant.role !== "assistant" || previousUserIndex < 0) return;
+
+    setIsLoading(true);
+
+    try {
+      const user = await ensureAuthenticatedUser();
+      const retryContext = activeSession.messages.slice(0, previousUserIndex + 1);
+
+      let { data: sessionData } = await supabase.auth.getSession();
+
+      if (!sessionData.session) {
+        const refreshed = await supabase.auth.refreshSession();
+        sessionData = refreshed.data;
+      }
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Your session has expired. Please sign in again.");
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ messages: retryContext.map(({ role, content }) => ({ role, content })) })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Could not retry the response.");
+      }
+
+      const nextContent = data.message?.content || "I could not generate a response.";
+
+      if (assistant.id) {
+        const { error: updateError } = await supabase
+          .from("chat_messages")
+          .update({ content: nextContent })
+          .eq("id", assistant.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const { data: inserted, error: insertError } = await supabase
+          .from("chat_messages")
+          .insert({
+            chat_id: activeSession.id,
+            user_id: user.id,
+            role: "assistant",
+            content: nextContent
+          })
+          .select("id,created_at")
+          .single();
+
+        if (insertError) throw insertError;
+
+        assistant.id = inserted.id;
+        assistant.createdAt = new Date(inserted.created_at).getTime();
+      }
+
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === activeSession.id
+            ? {
+                ...session,
+                messages: session.messages.map((item, index) =>
+                  index === messageIndex
+                    ? { ...item, content: nextContent }
+                    : item
+                ),
+                updatedAt: Date.now()
+              }
+            : session
+        )
+      );
+
+      await supabase
+        .from("chat_sessions")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", activeSession.id);
+    } catch (error) {
+      console.error("Retry message error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -575,7 +691,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       const user = await ensureAuthenticatedUser();
       const nextMessages: ChatMessage[] = [
         ...activeSession.messages,
-        { role: "user", content }
+        {
+          id: savedUserMessage.id,
+          role: "user",
+          content,
+          createdAt: new Date(savedUserMessage.created_at).getTime()
+        }
       ];
 
       const newTitle =
@@ -583,14 +704,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           ? makeTitle(content)
           : activeSession.title;
 
-      const { error: messageError } = await supabase
+      const { data: savedUserMessage, error: messageError } = await supabase
         .from("chat_messages")
         .insert({
           chat_id: activeSession.id,
           user_id: user.id,
           role: "user",
           content
-        });
+        })
+        .select("id,created_at")
+        .single();
 
       if (messageError) throw messageError;
 
@@ -648,16 +771,21 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         content: data.message?.content || "I could not generate a response."
       };
 
-      const { error: assistantSaveError } = await supabase
+      const { data: savedAssistantMessage, error: assistantSaveError } = await supabase
         .from("chat_messages")
         .insert({
           chat_id: activeSession.id,
           user_id: user.id,
           role: "assistant",
           content: assistantMessage.content
-        });
+        })
+        .select("id,created_at")
+        .single();
 
       if (assistantSaveError) throw assistantSaveError;
+
+      assistantMessage.id = savedAssistantMessage.id;
+      assistantMessage.createdAt = new Date(savedAssistantMessage.created_at).getTime();
 
       await supabase
         .from("chat_sessions")
@@ -991,6 +1119,39 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   <div className="assistant-content">
                     <div className="message-label">Aperonix</div>
                     <ReactMarkdown>{message.content}</ReactMarkdown>
+
+                    <div className="message-actions" aria-label="Response actions">
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={() => void copyMessage(message)}
+                        aria-label="Copy response"
+                        title={copiedMessageId === (message.id ?? `copy-${message.content.slice(0, 24)}`) ? "Copied" : "Copy"}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="8" y="8" width="11" height="11" rx="2" />
+                          <path d="M16 8V6.8A2.8 2.8 0 0 0 13.2 4H6.8A2.8 2.8 0 0 0 4 6.8v6.4A2.8 2.8 0 0 0 6.8 16H8" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={() => void retryMessage(index)}
+                        disabled={isLoading}
+                        aria-label="Retry response"
+                        title="Retry"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3" />
+                          <path d="M5 4v4h4M19 20v-4h-4" />
+                        </svg>
+                      </button>
+
+                      {copiedMessageId === (message.id ?? `copy-${message.content.slice(0, 24)}`) && (
+                        <span className="copy-feedback" role="status">Copied</span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div className="user-bubble">
