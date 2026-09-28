@@ -312,13 +312,27 @@ export default function AuthExperience() {
 
           {error && <div className="auth-error">{error}</div>}
 
-          <button type="button" className="oauth-button" onClick={() => void continueWithGoogle()} disabled={busy}>
-            <span className="google-mark">G</span>
-            Continue with Google
+          <button type="button" className="auth-neon-button auth-google-button" onClick={() => void continueWithGoogle()} disabled={busy}>
+            <span className="auth-button-icon google-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.57-.2-2.31H12v4.37h6.45a5.52 5.52 0 0 1-2.39 3.62v3.01h3.87c2.27-2.09 3.56-5.17 3.56-8.69Z"/>
+                <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.9l-3.87-3.01c-1.07.72-2.43 1.15-4.08 1.15-3.14 0-5.81-2.12-6.76-4.97H1.25v3.1A12 12 0 0 0 12 24Z"/>
+                <path fill="#FBBC05" d="M5.24 14.27A7.23 7.23 0 0 1 4.86 12c0-.79.14-1.56.38-2.27v-3.1H1.25A12 12 0 0 0 0 12c0 1.93.46 3.75 1.25 5.37l3.99-3.1Z"/>
+                <path fill="#EA4335" d="M12 4.76c1.77 0 3.36.61 4.61 1.8l3.45-3.45C17.95 1.09 15.24 0 12 0A12 12 0 0 0 1.25 6.63l3.99 3.1C6.19 6.88 8.86 4.76 12 4.76Z"/>
+              </svg>
+            </span>
+            <span>Continue with Google</span>
           </button>
 
-          <button type="button" className="email-choice" onClick={() => resetErrorAnd("signup")} disabled={busy}>
-            Continue with email
+          <button type="button" className="auth-neon-button auth-email-button" onClick={() => resetErrorAnd("signup")} disabled={busy}>
+            <span className="auth-button-icon email-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10.5" />
+                <path d="m5.5 8.5 6.5 5 6.5-5" />
+                <rect x="5.5" y="8.5" width="13" height="10" rx="2" />
+              </svg>
+            </span>
+            <span>Continue with email</span>
           </button>
 
           <div className="auth-switch">
@@ -366,6 +380,27 @@ export default function AuthExperience() {
           <p className="auth-subtitle">Use your email and password to continue.</p>
 
           {error && <div className="auth-error">{error}</div>}
+
+          <div className="signin-oauth">
+            <button
+              type="button"
+              className="auth-neon-button auth-google-button"
+              onClick={() => void continueWithGoogle()}
+              disabled={busy}
+            >
+              <span className="auth-button-icon google-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.57-.2-2.31H12v4.37h6.45a5.52 5.52 0 0 1-2.39 3.62v3.01h3.87c2.27-2.09 3.56-5.17 3.56-8.69Z"/>
+                  <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.9l-3.87-3.01c-1.07.72-2.43 1.15-4.08 1.15-3.14 0-5.81-2.12-6.76-4.97H1.25v3.1A12 12 0 0 0 12 24Z"/>
+                  <path fill="#FBBC05" d="M5.24 14.27A7.23 7.23 0 0 1 4.86 12c0-.79.14-1.56.38-2.27v-3.1H1.25A12 12 0 0 0 0 12c0 1.93.46 3.75 1.25 5.37l3.99-3.1Z"/>
+                  <path fill="#EA4335" d="M12 4.76c1.77 0 3.36.61 4.61 1.8l3.45-3.45C17.95 1.09 15.24 0 12 0A12 12 0 0 0 1.25 6.63l3.99 3.1C6.19 6.88 8.86 4.76 12 4.76Z"/>
+                </svg>
+              </span>
+              <span>Continue with Google</span>
+            </button>
+          </div>
+
+          <div className="auth-divider"><span>or continue with email</span></div>
 
           <form className="auth-form" onSubmit={handleSignin}>
             <label>
