@@ -2782,3 +2782,108 @@ body {
     min-height: 38px;
   }
 }
+
+
+/* Chat history actions — same neon-glass language as the primary Aperonix buttons. */
+.history-menu {
+  width: 168px;
+  padding: 8px;
+  border-radius: 13px;
+  background: #061124;
+}
+
+.history-menu button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  width: 100%;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, rgba(77,246,255,.70), rgba(75,141,255,.45) 50%, rgba(255,59,189,.70)) border-box;
+  color: #e7f1ff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  box-shadow:
+    0 0 11px rgba(77,246,255,.055),
+    0 0 14px rgba(255,59,189,.035),
+    inset 0 1px rgba(255,255,255,.035);
+  transition: transform 150ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.history-menu button + button {
+  margin-top: 9px;
+}
+
+.history-menu button::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(
+    115deg,
+    rgba(77,246,255,.045),
+    rgba(75,141,255,.025),
+    rgba(255,59,189,.05)
+  );
+}
+
+.history-menu button::after {
+  content: "";
+  position: absolute;
+  width: 30%;
+  height: 180%;
+  top: -40%;
+  left: -57%;
+  z-index: 0;
+  transform: rotate(18deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,.20),
+    transparent
+  );
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.history-menu button:hover {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(#0a1c33, #0a1c33) padding-box,
+    linear-gradient(100deg, rgba(77,246,255,.92), rgba(75,141,255,.62) 50%, rgba(255,59,189,.92)) border-box;
+  color: #fff;
+  box-shadow:
+    0 0 15px rgba(77,246,255,.10),
+    0 0 19px rgba(255,59,189,.07),
+    0 7px 18px rgba(0,0,0,.18);
+}
+
+.history-menu button:hover::after {
+  transform: translateX(430%) rotate(18deg);
+}
+
+.history-menu button:active {
+  transform: translateY(0) scale(.99);
+}
+
+.history-menu button.danger,
+.history-menu button.danger:hover {
+  color: #ffe1e1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-menu button::after {
+    display: none;
+  }
+
+  .history-menu button {
+    transition: none;
+  }
+}
