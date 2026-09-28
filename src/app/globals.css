@@ -3534,3 +3534,88 @@ body {
 .history-section.is-collapsed .history-list {
   display: none;
 }
+
+
+/* Assistant response actions: minimal, precise icon controls. */
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+  min-height: 28px;
+}
+
+.message-action-button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(104, 157, 218, .16);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(12, 31, 57, .72), rgba(5, 16, 33, .72)) padding-box,
+    linear-gradient(135deg, rgba(77,246,255,.16), rgba(75,141,255,.10), rgba(255,59,189,.16)) border-box;
+  color: #88a9d0;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.035),
+    0 0 8px rgba(77,246,255,.025);
+  transition: transform 150ms ease, color 150ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.message-action-button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.message-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  color: #e6f4ff;
+  background:
+    linear-gradient(145deg, rgba(14, 38, 68, .9), rgba(6, 19, 38, .9)) padding-box,
+    linear-gradient(135deg, rgba(77,246,255,.42), rgba(75,141,255,.24), rgba(255,59,189,.42)) border-box;
+  box-shadow:
+    0 0 10px rgba(77,246,255,.08),
+    0 0 12px rgba(255,59,189,.045);
+}
+
+.message-action-button:active:not(:disabled) {
+  transform: translateY(0) scale(.97);
+}
+
+.message-action-button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+
+.copy-feedback {
+  color: #789ac2;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-action-button {
+    transition: none;
+  }
+}
+
+/* Smaller, cleaner collapse chevrons for Pinned and Recents. */
+.history-section-chevron {
+  width: 16px;
+  height: 16px;
+}
+
+.history-section-chevron svg {
+  width: 13px;
+  height: 13px;
+}
+
+.history-section-chevron path {
+  stroke-width: 2.5;
+}
