@@ -689,6 +689,20 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     try {
       const user = await ensureAuthenticatedUser();
+
+      const { data: savedUserMessage, error: messageError } = await supabase
+        .from("chat_messages")
+        .insert({
+          chat_id: activeSession.id,
+          user_id: user.id,
+          role: "user",
+          content
+        })
+        .select("id,created_at")
+        .single();
+
+      if (messageError) throw messageError;
+
       const nextMessages: ChatMessage[] = [
         ...activeSession.messages,
         {
@@ -703,19 +717,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         activeSession.title === "New chat"
           ? makeTitle(content)
           : activeSession.title;
-
-      const { data: savedUserMessage, error: messageError } = await supabase
-        .from("chat_messages")
-        .insert({
-          chat_id: activeSession.id,
-          user_id: user.id,
-          role: "user",
-          content
-        })
-        .select("id,created_at")
-        .single();
-
-      if (messageError) throw messageError;
 
       await supabase
         .from("chat_sessions")
