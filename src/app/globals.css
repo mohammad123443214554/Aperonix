@@ -3665,3 +3665,35 @@ body {
     font-size: 18px;
   }
 }
+
+
+/* Good / bad feedback controls */
+.message-action-button.is-feedback-good {
+  color: #a8e7ff;
+  border-color: rgba(77,246,255,.34);
+  background:
+    linear-gradient(145deg, rgba(12, 44, 66, .9), rgba(5, 22, 38, .9)) padding-box,
+    linear-gradient(135deg, rgba(77,246,255,.68), rgba(75,141,255,.34), rgba(77,246,255,.5)) border-box;
+  box-shadow:
+    0 0 12px rgba(77,246,255,.13),
+    inset 0 1px rgba(255,255,255,.055);
+}
+
+.message-action-button.is-feedback-bad {
+  color: #ffc0d7;
+  border-color: rgba(255,91,166,.34);
+  background:
+    linear-gradient(145deg, rgba(59, 22, 45, .9), rgba(30, 9, 27, .9)) padding-box,
+    linear-gradient(135deg, rgba(255,91,166,.65), rgba(157,83,255,.3), rgba(255,91,166,.48)) border-box;
+  box-shadow:
+    0 0 12px rgba(255,91,166,.11),
+    inset 0 1px rgba(255,255,255,.055);
+}
+
+.message-action-button.is-feedback-good:hover:not(:disabled) {
+  color: #e9fbff;
+}
+
+.message-action-button.is-feedback-bad:hover:not(:disabled) {
+  color: #ffeaf3;
+}
