@@ -65,6 +65,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pinFlashId, setPinFlashId] = useState<string | null>(null);
+  const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
+  const [isRecentSectionOpen, setIsRecentSectionOpen] = useState(true);
   const [deleteSession, setDeleteSession] = useState<ChatSession | null>(null);
   const [renameSession, setRenameSession] = useState<ChatSession | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -725,9 +727,17 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         </div>
 
         <div className="history">
-          <div className="history-section pinned-section">
-            <div className="history-heading">Pinned</div>
-            <div className="history-list">
+          <div className={`history-section pinned-section ${isPinnedSectionOpen ? "is-open" : "is-collapsed"}`}>
+            <button
+              type="button"
+              className="history-section-heading"
+              onClick={() => setIsPinnedSectionOpen((current) => !current)}
+              aria-expanded={isPinnedSectionOpen}
+            >
+              <span>Pinned</span>
+              <span className="history-section-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {isPinnedSectionOpen && <div className="history-list">
             {sessions.filter((session) => session.isPinned).map((session) => (
   <div
                 key={session.id}
@@ -797,12 +807,20 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 )}
               </div>
             ))}
-            </div>
+            </div>}
           </div>
 
-          <div className="history-section recent-section">
-            <div className="history-heading">Recents</div>
-            <div className="history-list">
+          <div className={`history-section recent-section ${isRecentSectionOpen ? "is-open" : "is-collapsed"}`}>
+            <button
+              type="button"
+              className="history-section-heading"
+              onClick={() => setIsRecentSectionOpen((current) => !current)}
+              aria-expanded={isRecentSectionOpen}
+            >
+              <span>Recents</span>
+              <span className="history-section-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {isRecentSectionOpen && <div className="history-list">
             {sessions.filter((session) => !session.isPinned).map((session) => (
   <div
                 key={session.id}
@@ -875,7 +893,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               {sessions.filter((session) => !session.isPinned).length === 0 && (
                 <div className="history-empty">No recent chats</div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
 
