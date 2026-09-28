@@ -215,7 +215,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     );
     if (!element) return;
     element.style.height = "auto";
-    element.style.height = `${Math.min(element.scrollHeight, 180)}px`;
+    element.style.height = `${Math.min(element.scrollHeight, 156)}px`;
+    element.scrollTop = element.scrollHeight;
   }, [input]);
 
   function selectSession(id: string) {
