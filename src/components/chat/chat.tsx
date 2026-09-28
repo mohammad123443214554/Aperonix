@@ -817,6 +817,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               Delete account
             </button>
           </div>
+        )}
       </aside>
 
       {isSidebarOpen && (
