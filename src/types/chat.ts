@@ -1,4 +1,5 @@
 export type ChatRole = "system" | "user" | "assistant";
+export type FeedbackType = "good" | "bad";
 
 export interface ChatMessage {
   id?: string;
