@@ -735,7 +735,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               aria-expanded={isPinnedSectionOpen}
             >
               <span>Pinned</span>
-              <span className="history-section-chevron" aria-hidden="true">⌄</span>
+              <span className="history-section-chevron" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M6 9.5 12 15.5 18 9.5" />
+                </svg>
+              </span>
             </button>
             {isPinnedSectionOpen && <div className="history-list">
             {sessions.filter((session) => session.isPinned).map((session) => (
