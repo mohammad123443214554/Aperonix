@@ -774,12 +774,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           </div>
         </div>
 
-        <button
-          type="button"
-          className="profile-trigger"
-          onClick={() => setProfileOpen((current) => !current)}
-          aria-expanded={profileOpen}
-        >
+        <div className="profile-trigger profile-static">
           <span className="profile-avatar">
             {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
           </span>
@@ -788,10 +783,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             <small>{profile.email || "Account"}</small>
           </span>
           <span className="profile-chevron">›</span>
-        </button>
+        </div>
 
-        {profileOpen && (
-          <div className="profile-popover" role="dialog" aria-label="Profile">
+        <div className="profile-popover" role="region" aria-label="Profile actions">
             <div className="profile-popover-head">
               <span className="profile-avatar large">
                 {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
@@ -817,7 +811,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               Delete account
             </button>
           </div>
-        )}
       </aside>
 
       {isSidebarOpen && (
