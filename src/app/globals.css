@@ -2647,3 +2647,14 @@ body {
     display: none;
   }
 }
+
+
+/* Keep the composer premium, but without the moving shine sweep. */
+.composer::after {
+  display: none !important;
+}
+
+.composer:hover::after,
+.composer:focus-within::after {
+  transform: none !important;
+}
