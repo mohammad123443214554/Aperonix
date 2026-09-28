@@ -3422,3 +3422,67 @@ body {
     flex-basis: 30px;
   }
 }
+
+
+/* Collapsible Pinned / Recents headings */
+.history-section-heading {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #7f9ac0;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-align: left;
+  text-transform: uppercase;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.history-section-heading:hover {
+  color: #b7d4f5;
+  background: rgba(43, 87, 143, .09);
+}
+
+.pinned-section .history-section-heading {
+  color: #a9c9f0;
+}
+
+.history-section-chevron {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: #7894b5;
+  font-size: 15px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 180ms ease, color 150ms ease;
+}
+
+.history-section-heading:hover .history-section-chevron {
+  color: #a8c9ef;
+}
+
+.history-section.is-collapsed .history-section-chevron {
+  transform: rotate(-90deg);
+}
+
+.history-section.is-collapsed {
+  margin-bottom: 3px;
+}
+
+.history-section.is-collapsed + .history-section {
+  margin-top: 10px;
+}
+
+@media (max-width: 800px) {
+  .history-section-heading {
+    min-height: 32px;
+  }
+}
