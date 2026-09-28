@@ -3130,3 +3130,88 @@ body {
     display: none;
   }
 }
+
+
+/* Rename/delete dialogs — use the same premium neon-glass button language. */
+.chat-modal {
+  padding-top: 16px;
+}
+
+.chat-modal-title {
+  margin-top: -2px;
+  margin-bottom: 7px;
+}
+
+.chat-modal-actions {
+  gap: 10px;
+}
+
+.chat-modal-actions button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 48%, var(--aperonix-magenta)) border-box;
+  color: #f4fbff;
+  font-size: 11px;
+  font-weight: 750;
+  box-shadow:
+    0 0 12px rgba(77,246,255,.07),
+    0 0 17px rgba(255,59,189,.04),
+    inset 0 1px rgba(255,255,255,.05);
+  transition: transform 160ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.chat-modal-actions button::after {
+  content: "";
+  position: absolute;
+  width: 30%;
+  height: 185%;
+  top: -42%;
+  left: -56%;
+  z-index: 0;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.21), transparent);
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.chat-modal-actions button:hover {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(#0a1c33, #0a1c33) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 48%, var(--aperonix-magenta)) border-box;
+  color: #fff;
+  box-shadow:
+    0 0 16px rgba(77,246,255,.12),
+    0 0 22px rgba(255,59,189,.07),
+    0 7px 20px rgba(0,0,0,.18);
+}
+
+.chat-modal-actions button:hover::after {
+  transform: translateX(430%) rotate(18deg);
+}
+
+.chat-modal-actions button:active {
+  transform: translateY(0) scale(.99);
+}
+
+.chat-modal-actions button.primary,
+.chat-modal-actions button.danger {
+  border-color: transparent;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 48%, var(--aperonix-magenta)) border-box;
+  color: #f4fbff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-modal-actions button::after {
+    display: none;
+  }
+}
