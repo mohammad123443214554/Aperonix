@@ -264,10 +264,9 @@ export default function AuthExperience() {
               alt="Aperonix AI"
             />
             <span className="hero-kicker">A professional AI workspace</span>
-            <h1>Think clearly. Create freely.</h1>
+            <h1>Build faster. Think deeper.</h1>
             <p>
-              Aperonix AI brings coding, research, learning and creative work
-              together in one focused workspace.
+              <strong>Aperonix AI</strong> transforms how you code, research, and create in one unified workspace.
             </p>
 
             <div className="landing-actions">
