@@ -3017,3 +3017,24 @@ body {
     display: none;
   }
 }
+
+
+/* Restore the profile popover behavior: the bottom profile card opens this panel. */
+.profile-popover {
+  position: absolute;
+  left: 10px;
+  bottom: 76px;
+  z-index: 80;
+  width: 250px;
+  margin: 0;
+}
+
+@media (max-width: 800px) {
+  .profile-popover {
+    left: 8px;
+    right: 8px;
+    bottom: 72px;
+    width: auto;
+    margin: 0;
+  }
+}
