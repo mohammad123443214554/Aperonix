@@ -3486,3 +3486,51 @@ body {
     min-height: 32px;
   }
 }
+
+
+/* Use the provided clean chevron shape for Pinned and Recents. */
+.history-section-heading {
+  min-height: 32px;
+  padding: 4px 9px 5px;
+}
+
+.history-section-chevron {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: #b8c0cc;
+  transform: rotate(0deg);
+  transition: transform 180ms ease, color 150ms ease;
+}
+
+.history-section-chevron svg {
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+}
+
+.history-section-chevron path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.history-section-heading:hover .history-section-chevron {
+  color: #eef4fb;
+}
+
+.history-section.is-collapsed .history-section-chevron {
+  transform: rotate(-90deg);
+}
+
+/* Keep both sections expanded by default; only the heading click toggles them. */
+.history-section.is-open .history-list {
+  display: flex;
+}
+
+.history-section.is-collapsed .history-list {
+  display: none;
+}
