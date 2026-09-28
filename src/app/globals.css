@@ -3038,3 +3038,95 @@ body {
     margin: 0;
   }
 }
+
+
+/* Profile page actions: match Get Started with pill shape and shine. */
+.profile-details-view + .account-modal-actions .modal-primary,
+.account-page-overlay .modal-primary,
+.account-page-overlay .modal-secondary {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  transition: transform 160ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.account-page-overlay .modal-primary {
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 48%, var(--aperonix-magenta)) border-box;
+  color: #f4fbff;
+  box-shadow:
+    0 0 15px rgba(77,246,255,.09),
+    0 0 20px rgba(255,59,189,.05),
+    inset 0 1px rgba(255,255,255,.06);
+}
+
+.account-page-overlay .modal-secondary {
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, rgba(77,246,255,.70), rgba(75,141,255,.42) 50%, rgba(255,59,189,.70)) border-box;
+  color: #e2efff;
+  box-shadow:
+    0 0 12px rgba(77,246,255,.06),
+    0 0 16px rgba(255,59,189,.035),
+    inset 0 1px rgba(255,255,255,.045);
+}
+
+.account-page-overlay .modal-primary::after,
+.account-page-overlay .modal-secondary::after {
+  content: "";
+  position: absolute;
+  width: 31%;
+  height: 185%;
+  top: -42%;
+  left: -56%;
+  z-index: 0;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.21), transparent);
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.account-page-overlay .modal-primary > *,
+.account-page-overlay .modal-secondary > * {
+  position: relative;
+  z-index: 1;
+}
+
+.account-page-overlay .modal-primary:hover:not(:disabled),
+.account-page-overlay .modal-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 18px rgba(77,246,255,.13),
+    0 0 23px rgba(255,59,189,.08),
+    0 8px 22px rgba(0,0,0,.18);
+}
+
+.account-page-overlay .modal-primary:hover:not(:disabled)::after,
+.account-page-overlay .modal-secondary:hover:not(:disabled)::after {
+  transform: translateX(430%) rotate(18deg);
+}
+
+.account-page-overlay .modal-primary:active:not(:disabled),
+.account-page-overlay .modal-secondary:active:not(:disabled) {
+  transform: translateY(0) scale(.99);
+}
+
+.account-page-overlay .modal-primary:disabled,
+.account-page-overlay .modal-secondary:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-page-overlay .modal-primary::after,
+  .account-page-overlay .modal-secondary::after {
+    display: none;
+  }
+}
