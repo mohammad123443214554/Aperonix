@@ -2485,3 +2485,9 @@ body {
     padding: 0 17px;
   }
 }
+
+
+/* Give the auth choice buttons a little more breathing room. */
+.auth-choice-card .auth-neon-button + .auth-neon-button {
+  margin-top: 12px;
+}
