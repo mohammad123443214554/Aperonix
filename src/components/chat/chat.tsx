@@ -725,11 +725,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         </div>
 
         <div className="history">
-          <div className="history-heading">Chat history</div>
-
-          <div className="history-list">
-            {sessions.map((session) => (
-              <div
+          <div className="history-section pinned-section">
+            <div className="history-heading">Pinned</div>
+            <div className="history-list">
+            {sessions.filter((session) => session.isPinned).map((session) => (
+  <div
                 key={session.id}
                 className={`history-item-wrap ${session.id === activeSession?.id ? "active" : ""}`}
               >
@@ -739,20 +739,23 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   onClick={() => selectSession(session.id)}
                   title={session.title}
                 >
-                  <span
-                    className={`history-icon pin-glass ${session.isPinned ? "is-pinned" : ""} ${pinFlashId === session.id ? "pin-flash" : ""}`}
-                    aria-hidden="true"
-                  >
-                    {session.isPinned ? (
-                      <svg viewBox="0 0 24 24">
-                        <path d="M8.2 3.8h7.6l-.8 5.1 2.4 2.4v1.5H6.6v-1.5L9 8.9l-.8-5.1Z" />
-                        <path d="M12 12.8v7.4" />
-                      </svg>
-                    ) : (
-                      <span className="unpinned-dot" />
-                    )}
+                  <span className="history-chat-avatar" aria-hidden="true">
+                    <span className="history-chat-avatar-mark">◌</span>
                   </span>
-                  <span>{session.title}</span>
+
+                  {session.isPinned && (
+                    <span
+                      className={`history-pin-indicator ${pinFlashId === session.id ? "pin-flash" : ""}`}
+                      aria-hidden="true"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <path d="M8.1 4.1h7.8l-.9 4.8 2.3 2.3v1.4H6.7v-1.4L9 8.9l-.9-4.8Z" />
+                        <path d="M12 12.6v7.3" />
+                      </svg>
+                    </span>
+                  )}
+
+                  <span className="history-title">{session.title}</span>
                 </button>
 
                 <button
@@ -794,6 +797,85 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 )}
               </div>
             ))}
+            </div>
+          </div>
+
+          <div className="history-section recent-section">
+            <div className="history-heading">Recents</div>
+            <div className="history-list">
+            {sessions.filter((session) => !session.isPinned).map((session) => (
+  <div
+                key={session.id}
+                className={`history-item-wrap ${session.id === activeSession?.id ? "active" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="history-item"
+                  onClick={() => selectSession(session.id)}
+                  title={session.title}
+                >
+                  <span className="history-chat-avatar" aria-hidden="true">
+                    <span className="history-chat-avatar-mark">◌</span>
+                  </span>
+
+                  {session.isPinned && (
+                    <span
+                      className={`history-pin-indicator ${pinFlashId === session.id ? "pin-flash" : ""}`}
+                      aria-hidden="true"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <path d="M8.1 4.1h7.8l-.9 4.8 2.3 2.3v1.4H6.7v-1.4L9 8.9l-.9-4.8Z" />
+                        <path d="M12 12.6v7.3" />
+                      </svg>
+                    </span>
+                  )}
+
+                  <span className="history-title">{session.title}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="history-menu-button"
+                  aria-label={`Options for ${session.title}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setOpenMenuId((current) =>
+                      current === session.id ? null : session.id
+                    );
+                  }}
+                >
+                  ⋯
+                </button>
+
+                {openMenuId === session.id && (
+                  <div
+                    className="history-menu"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button type="button" onClick={() => void handleDuplicate(session)}>
+                      Duplicate
+                    </button>
+                    <button type="button" onClick={() => void handleRename(session)}>
+                      Rename
+                    </button>
+                    <button type="button" onClick={() => void handlePin(session)}>
+                      {session.isPinned ? "Unpin chat" : "Pin chat"}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => void handleDelete(session)}
+                    >
+                      Delete chat
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+              {sessions.filter((session) => !session.isPinned).length === 0 && (
+                <div className="history-empty">No recent chats</div>
+              )}
+            </div>
           </div>
         </div>
 
