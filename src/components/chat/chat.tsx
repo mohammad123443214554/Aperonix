@@ -29,6 +29,14 @@ function makeTitle(content: string) {
   return cleaned.length > 38 ? `${cleaned.slice(0, 38)}…` : cleaned || "New chat";
 }
 
+function sortSessions(items: ChatSession[]) {
+  return [...items].sort(
+    (a, b) =>
+      Number(b.isPinned) - Number(a.isPinned) ||
+      b.updatedAt - a.updatedAt
+  );
+}
+
 const profileMonths = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
@@ -248,7 +256,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         isPinned: Boolean(data.is_pinned)
       };
 
-      setSessions((current) => [next, ...current]);
+      setSessions((current) => sortSessions([...current, next]));
       setActiveSessionId(next.id);
     } catch (error) {
       console.error("New chat error:", error);
@@ -338,8 +346,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     const { error } = await supabase
       .from("chat_sessions")
       .update({
-        is_pinned: nextPinned,
-        updated_at: new Date().toISOString()
+        is_pinned: nextPinned
       })
       .eq("id", session.id);
 
@@ -349,14 +356,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
 
     setSessions((current) =>
-      [...current.map((item) =>
-        item.id === session.id
-          ? { ...item, isPinned: nextPinned, updatedAt: Date.now() }
-          : item
-      )].sort(
-        (a, b) =>
-          Number(b.isPinned) - Number(a.isPinned) ||
-          b.updatedAt - a.updatedAt
+      sortSessions(
+        current.map((item) =>
+          item.id === session.id
+            ? { ...item, isPinned: nextPinned }
+            : item
+        )
       )
     );
   }
@@ -407,7 +412,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         isPinned: false
       };
 
-      setSessions((current) => [duplicate, ...current]);
+      setSessions((current) => sortSessions([duplicate, ...current]));
       setActiveSessionId(duplicate.id);
     } catch (error) {
       console.error("Duplicate chat error:", error);
