@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
-import type { ChatMessage, ChatSession } from "@/types/chat";
+import type { ChatMessage, ChatSession, FeedbackType } from "@/types/chat";
 
 const welcomeMessage: ChatMessage = {
   role: "assistant",
@@ -66,6 +66,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pinFlashId, setPinFlashId] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, FeedbackType>>({});
   const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
   const [isRecentSectionOpen, setIsRecentSectionOpen] = useState(true);
   const [deleteSession, setDeleteSession] = useState<ChatSession | null>(null);
@@ -169,6 +170,30 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         }));
 
         if (!mounted) return;
+
+        const assistantMessageIds = messageRows
+          .filter((message) => message.role === "assistant")
+          .map((message) => message.id);
+
+        if (assistantMessageIds.length > 0) {
+          const { data: feedbackRows, error: feedbackError } = await supabase
+            .from("message_feedback")
+            .select("message_id,feedback")
+            .eq("user_id", user.id)
+            .in("message_id", assistantMessageIds);
+
+          if (feedbackError && !/does not exist|relation .*message_feedback/i.test(feedbackError.message)) {
+            console.error("Feedback load error:", feedbackError);
+          }
+
+          if (mounted && feedbackRows) {
+            setFeedbackByMessageId(
+              Object.fromEntries(
+                feedbackRows.map((row) => [row.message_id, row.feedback as FeedbackType])
+              )
+            );
+          }
+        }
 
         if (loaded.length > 0) {
           setSessions(loaded);
@@ -581,6 +606,65 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  async function handleFeedback(message: ChatMessage, feedback: FeedbackType) {
+    if (isLoading || !activeSession || !message.id) return;
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      console.error("Feedback auth error:", userError);
+      return;
+    }
+
+    const user = userData.user;
+    const userName =
+      [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() ||
+      user.email ||
+      "Unknown user";
+    const current = feedbackByMessageId[message.id];
+
+    try {
+      if (current === feedback) {
+        const { error } = await supabase
+          .from("message_feedback")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("message_id", message.id);
+
+        if (error) throw error;
+
+        setFeedbackByMessageId((state) => {
+          const next = { ...state };
+          delete next[message.id as string];
+          return next;
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from("message_feedback")
+        .upsert(
+          {
+            user_id: user.id,
+            user_name: userName,
+            chat_id: activeSession.id,
+            message_id: message.id,
+            feedback,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: "user_id,message_id" }
+        );
+
+      if (error) throw error;
+
+      setFeedbackByMessageId((state) => ({
+        ...state,
+        [message.id as string]: feedback
+      }));
+    } catch (error) {
+      console.error("Save feedback error:", error);
+    }
+  }
+
   async function retryMessage(messageIndex: number) {
     if (isLoading || !activeSession) return;
 
@@ -624,6 +708,20 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       }
 
       const nextContent = data.message?.content || "I could not generate a response.";
+
+      if (assistant.id) {
+        await supabase
+          .from("message_feedback")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("message_id", assistant.id);
+
+        setFeedbackByMessageId((state) => {
+          const next = { ...state };
+          delete next[assistant.id as string];
+          return next;
+        });
+      }
 
       if (assistant.id) {
         const { error: updateError } = await supabase
@@ -1151,6 +1249,34 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3" />
                           <path d="M5 4v4h4M19 20v-4h-4" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`message-action-button ${feedbackByMessageId[message.id ?? ""] === "good" ? "is-feedback-good" : ""}`}
+                        onClick={() => void handleFeedback(message, "good")}
+                        disabled={isLoading || !message.id}
+                        aria-label="Good response"
+                        title="Good response"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M7.5 10.5v9H4v-9h3.5Z" />
+                          <path d="M7.5 19.5h9.1c.85 0 1.57-.58 1.76-1.41l1.21-5.26A1.8 1.8 0 0 0 17.82 10H14l.62-3.33A2.2 2.2 0 0 0 12.46 4H11.8L7.5 10.5" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`message-action-button ${feedbackByMessageId[message.id ?? ""] === "bad" ? "is-feedback-bad" : ""}`}
+                        onClick={() => void handleFeedback(message, "bad")}
+                        disabled={isLoading || !message.id}
+                        aria-label="Bad response"
+                        title="Bad response"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M7.5 13.5v-9H4v9h3.5Z" />
+                          <path d="M7.5 4.5h9.1c.85 0 1.57.58 1.76 1.41l1.21 5.26A1.8 1.8 0 0 1 17.82 14H14l.62 3.33A2.2 2.2 0 0 1 12.46 20H11.8L7.5 13.5" />
                         </svg>
                       </button>
 
