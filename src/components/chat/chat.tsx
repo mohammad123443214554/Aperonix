@@ -903,16 +903,20 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               aria-label="Message Aperonix AI"
             />
 
-            <button
-              type="submit"
-              className="send-button"
-              disabled={!canSend}
-              aria-label="Send message"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M20.4 3.7 4.1 10.2c-.7.3-.7 1.3 0 1.6l6.2 2.3 2.3 6.2c.3.7 1.3.7 1.6 0l6.5-16.3c.3-.8-.1-1.1-.3-1.1Z" />
-              </svg>
-            </button>
+            <div className="composer-toolbar">
+              <span className="composer-plus" aria-hidden="true">+</span>
+
+              <button
+                type="submit"
+                className="send-button"
+                disabled={!canSend}
+                aria-label="Send message"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20.4 3.7 4.1 10.2c-.7.3-.7 1.3 0 1.6l6.2 2.3 2.3 6.2c.3.7 1.3.7 1.6 0l6.5-16.3c.3-.8-.1-1.1-.3-1.1Z" />
+                </svg>
+              </button>
+            </div>
           </form>
 
           <p className="composer-note">
