@@ -64,6 +64,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [pinFlashId, setPinFlashId] = useState<string | null>(null);
   const [deleteSession, setDeleteSession] = useState<ChatSession | null>(null);
   const [renameSession, setRenameSession] = useState<ChatSession | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -364,6 +365,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         )
       )
     );
+
+    setPinFlashId(session.id);
+    window.setTimeout(() => {
+      setPinFlashId((current) => (current === session.id ? null : current));
+    }, 650);
   }
 
   async function handleDuplicate(session: ChatSession) {
@@ -733,7 +739,19 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   onClick={() => selectSession(session.id)}
                   title={session.title}
                 >
-                  <span className="history-icon">{session.isPinned ? "📌" : "◌"}</span>
+                  <span
+                    className={`history-icon pin-glass ${session.isPinned ? "is-pinned" : ""} ${pinFlashId === session.id ? "pin-flash" : ""}`}
+                    aria-hidden="true"
+                  >
+                    {session.isPinned ? (
+                      <svg viewBox="0 0 24 24">
+                        <path d="M8.2 3.8h7.6l-.8 5.1 2.4 2.4v1.5H6.6v-1.5L9 8.9l-.8-5.1Z" />
+                        <path d="M12 12.8v7.4" />
+                      </svg>
+                    ) : (
+                      <span className="unpinned-dot" />
+                    )}
+                  </span>
                   <span>{session.title}</span>
                 </button>
 
