@@ -214,9 +214,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
 
-  const messages = activeSession?.messages.length
-    ? activeSession.messages
-    : [welcomeMessage];
+  const messages = activeSession?.messages ?? [];
+  const isEmptyChat = Boolean(activeSession && messages.length === 0);
 
   const canSend = useMemo(
     () => input.trim().length > 0 && !isLoading && Boolean(activeSession),
@@ -1107,7 +1106,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         <section className="messages" aria-live="polite">
           <div className="messages-inner">
-            {messages.map((message, index) => (
+            {isEmptyChat ? (
+              <div className="empty-chat-welcome" aria-label="Aperonix welcome">
+                <img src="/aperonix-logo.png" alt="Aperonix AI" className="empty-chat-logo" />
+                <p className="empty-chat-greeting">Hello! How can I help you today?</p>
+              </div>
+            ) : (
+              messages.map((message, index) => (
               <article
                 key={`${activeSession?.id}-${message.role}-${index}`}
                 className={`message-row ${message.role}`}
@@ -1160,7 +1165,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   </div>
                 )}
               </article>
-            ))}
+              ))
+            )}
 
             {isLoading && (
               <article className="message-row assistant">
