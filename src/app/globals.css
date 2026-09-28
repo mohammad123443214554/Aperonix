@@ -2887,3 +2887,133 @@ body {
     transition: none;
   }
 }
+
+
+/* Profile surface: premium neon-glass, informational only. */
+.profile-trigger.profile-static {
+  cursor: default;
+  pointer-events: none;
+  border-color: transparent;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(105deg, rgba(77,246,255,.36), rgba(75,141,255,.22), rgba(255,59,189,.36)) border-box;
+  box-shadow:
+    0 0 13px rgba(77,246,255,.05),
+    0 0 16px rgba(255,59,189,.035),
+    inset 0 1px rgba(255,255,255,.04);
+}
+
+.profile-trigger.profile-static .profile-chevron {
+  opacity: .55;
+}
+
+.profile-popover {
+  position: static;
+  width: calc(100% - 20px);
+  margin: 0 10px 8px;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background:
+    linear-gradient(#061124, #061124) padding-box,
+    linear-gradient(105deg, rgba(77,246,255,.28), rgba(75,141,255,.16), rgba(255,59,189,.28)) border-box;
+  box-shadow:
+    0 18px 45px rgba(0,0,0,.28),
+    0 0 14px rgba(77,246,255,.04),
+    inset 0 1px rgba(255,255,255,.035);
+}
+
+.profile-popover-head {
+  cursor: default;
+  pointer-events: none;
+  margin: 0 0 8px;
+  padding: 7px 7px 10px;
+  border-bottom: 1px solid rgba(79,126,190,.13);
+  border-radius: 9px;
+  background: rgba(7,20,40,.34);
+}
+
+/* Only the four action buttons are interactive. */
+.profile-popover > button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 38px;
+  margin-top: 9px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, rgba(77,246,255,.70), rgba(75,141,255,.42) 50%, rgba(255,59,189,.70)) border-box;
+  color: #e7f1ff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow:
+    0 0 11px rgba(77,246,255,.05),
+    0 0 14px rgba(255,59,189,.03),
+    inset 0 1px rgba(255,255,255,.035);
+  transition: transform 150ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.profile-popover > button::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(115deg, rgba(77,246,255,.045), rgba(75,141,255,.025), rgba(255,59,189,.05));
+}
+
+.profile-popover > button::after {
+  content: "";
+  position: absolute;
+  width: 30%;
+  height: 180%;
+  top: -40%;
+  left: -57%;
+  z-index: 0;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.2), transparent);
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.profile-popover > button:hover {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(#0a1c33, #0a1c33) padding-box,
+    linear-gradient(100deg, rgba(77,246,255,.92), rgba(75,141,255,.62) 50%, rgba(255,59,189,.92)) border-box;
+  color: #fff;
+  box-shadow:
+    0 0 15px rgba(77,246,255,.10),
+    0 0 19px rgba(255,59,189,.07),
+    0 7px 18px rgba(0,0,0,.18);
+}
+
+.profile-popover > button:hover::after {
+  transform: translateX(430%) rotate(18deg);
+}
+
+.profile-popover > button:active {
+  transform: translateY(0) scale(.99);
+}
+
+.profile-popover > button.danger,
+.profile-popover > button.danger:hover {
+  color: #ffe1e1;
+}
+
+@media (max-width: 800px) {
+  .profile-popover {
+    width: calc(100% - 16px);
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-popover > button::after {
+    display: none;
+  }
+}
