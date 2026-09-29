@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { createPortal } from "react-dom";
+import { usePathname, useRouter } from "next/navigation";
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
@@ -130,6 +131,9 @@ async function ensureAuthenticatedUser() {
 }
 
 export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) {
+  const pathname = usePathname();
+  const router = useRouter();
+
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [input, setInput] = useState("");
@@ -184,6 +188,21 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setProfileDetailsOpen(pathname === "/profile");
+    setProfileEditOpen(pathname === "/profile/edit");
+    setSettingsOpen(pathname === "/settings" || pathname === "/settings/aperonix");
+    setAperonixSettingOpen(pathname === "/settings/aperonix");
+    setAccountDeleteOpen(pathname === "/account/delete");
+
+    if (!pathname.startsWith("/profile/edit")) {
+      setPhotoEditorOpen(false);
+    }
+
+    setProfileOpen(false);
+    setOpenMenuId(null);
+  }, [pathname]);
 
   useEffect(() => {
     let mounted = true;
@@ -332,6 +351,28 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     };
   }, []);
 
+  useEffect(() => {
+    if (sessions.length === 0) return;
+
+    const chatMatch = pathname.match(/^\/chat\/([^/]+)$/);
+    if (chatMatch) {
+      const requestedId = decodeURIComponent(chatMatch[1]);
+      const requestedSession = sessions.find((session) => session.id === requestedId);
+
+      if (requestedSession) {
+        setActiveSessionId(requestedSession.id);
+      } else {
+        const fallback = sessions[0];
+        setActiveSessionId(fallback.id);
+        router.replace(`/chat/${fallback.id}`);
+      }
+    } else if (pathname === "/chat") {
+      setActiveSessionId((current) =>
+        sessions.some((session) => session.id === current) ? current : sessions[0].id
+      );
+    }
+  }, [pathname, router, sessions]);
+
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
 
@@ -362,6 +403,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setActiveSessionId(id);
     setOpenMenuId(null);
     setIsSidebarOpen(false);
+    router.push(`/chat/${id}`);
   }
 
   async function handleNewChat() {
@@ -388,6 +430,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setSessions((current) => sortSessions([...current, next]));
       setActiveSessionId(next.id);
+      router.push(`/chat/${next.id}`);
     } catch (error) {
       console.error("New chat error:", error);
     }
@@ -425,6 +468,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     if (session.id === activeSessionId) {
       if (remaining.length > 0) {
         setActiveSessionId(remaining[0].id);
+        router.push(`/chat/${remaining[0].id}`);
       } else {
         await handleNewChat();
       }
@@ -565,6 +609,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setSessions((current) => sortSessions([duplicate, ...current]));
       setActiveSessionId(duplicate.id);
+      router.push(`/chat/${duplicate.id}`);
     } catch (error) {
       console.error("Duplicate chat error:", error);
     }
@@ -628,6 +673,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileDraft(nextProfile);
     setProfileSaving(false);
     setProfileEditOpen(false);
+    router.push("/profile");
   }
 
   async function deleteAccount() {
@@ -676,6 +722,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   function openProfileDetails() {
     setProfileOpen(false);
     setProfileDetailsOpen(true);
+    setProfileEditOpen(false);
+    router.push("/profile");
   }
 
   function openProfileEditor() {
@@ -683,6 +731,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileEditOpen(true);
     setProfileOpen(false);
     setProfileDetailsOpen(false);
+    router.push("/profile/edit");
   }
 
 
@@ -693,12 +742,14 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileOpen(false);
     setProfileDetailsOpen(false);
     setProfileEditOpen(false);
+    router.push("/settings");
   }
 
   function openAperonixSetting() {
     setSettingsDraft(aperonixSetting);
     setSettingsError("");
     setAperonixSettingOpen(true);
+    router.push("/settings/aperonix");
   }
 
   async function saveAperonixSetting() {
@@ -725,7 +776,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setAperonixSetting(cleaned);
       setSettingsDraft(cleaned);
-      setSettingsOpen(false);
+      setAperonixSettingOpen(false);
+      setSettingsOpen(true);
+      router.replace("/settings");
     } catch (error) {
       console.error("Aperonix setting save error:", error);
       setSettingsError(
@@ -1562,6 +1615,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 setAccountDeleteText("");
                 setAccountDeleteError("");
                 setAccountDeleteOpen(true);
+                router.push("/account/delete");
               }}
             >
               Delete account
@@ -1746,7 +1800,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       {profileDetailsOpen && (
         <section className="account-page-overlay">
           <div className="account-page-header">
-            <button type="button" className="account-page-back" onClick={() => setProfileDetailsOpen(false)}>
+            <button type="button" className="account-page-back" onClick={() => {
+                setProfileDetailsOpen(false);
+                router.push("/chat");
+              }}>
               <span>←</span> Back
             </button>
             <span className="account-page-title">Profile</span>
@@ -1802,8 +1859,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   setAperonixSettingOpen(false);
                   setSettingsError("");
                   setSettingsDraft(aperonixSetting);
+                  router.push("/settings");
                 } else {
                   setSettingsOpen(false);
+                  router.push("/chat");
                 }
               }}
               disabled={settingsSaving}
@@ -1894,7 +1953,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       {profileEditOpen && (
         <section className="account-page-overlay">
           <div className="account-page-header">
-            <button type="button" className="account-page-back" onClick={() => setProfileEditOpen(false)}>
+            <button type="button" className="account-page-back" onClick={() => {
+              setProfileEditOpen(false);
+              router.push("/profile");
+            }}>
               <span>←</span> Back
             </button>
             <span className="account-page-title">Edit profile</span>
@@ -2162,7 +2224,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               placeholder="DELETE MY ACCOUNT"
             />
             <div className="account-modal-actions">
-              <button type="button" className="modal-secondary" onClick={() => { setAccountDeleteOpen(false); setAccountDeleteText(""); }} disabled={accountDeleting}>Cancel</button>
+              <button type="button" className="modal-secondary" onClick={() => {
+                setAccountDeleteOpen(false);
+                setAccountDeleteText("");
+                setAccountDeleteError("");
+                router.push("/profile");
+              }} disabled={accountDeleting}>Cancel</button>
               <button
                 type="button"
                 className="modal-danger"
