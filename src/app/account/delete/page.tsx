@@ -1,5 +1,5 @@
-import AuthExperience from "@/components/auth/auth-experience";
+import { redirect } from "next/navigation";
 
 export default function DeleteAccountPage() {
-  return <AuthExperience />;
+  redirect("/settings/danger-zone");
 }
