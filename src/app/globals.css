@@ -4532,3 +4532,183 @@ body {
     min-height: 160px;
   }
 }
+
+/* Danger Zone — subtle red safety styling while keeping the Aperonix glass theme. */
+.danger-zone-option {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(105deg, rgba(77,246,255,.20), rgba(75,141,255,.12) 48%, rgba(255,72,105,.34)) border-box;
+}
+
+.danger-zone-option::after,
+.danger-zone-action::after {
+  content: "";
+  position: absolute;
+  width: 28%;
+  height: 190%;
+  top: -45%;
+  left: -58%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent);
+  pointer-events: none;
+  transition: transform 540ms cubic-bezier(.2,.75,.2,1);
+}
+
+.danger-zone-option:hover::after,
+.danger-zone-action:hover::after {
+  transform: translateX(455%) rotate(18deg);
+}
+
+.danger-zone-option > *,
+.danger-zone-action > * {
+  position: relative;
+  z-index: 1;
+}
+
+.danger-zone-option:hover {
+  border-color: rgba(255, 88, 112, .34);
+  box-shadow:
+    0 0 18px rgba(77,246,255,.045),
+    0 0 22px rgba(255,72,105,.055),
+    inset 0 1px rgba(255,255,255,.05);
+}
+
+.danger-zone-icon {
+  color: #ff8198;
+  border-color: rgba(255, 94, 121, .22);
+  background: rgba(55, 16, 30, .58);
+  box-shadow:
+    0 0 12px rgba(255, 83, 112, .06),
+    inset 0 1px rgba(255,255,255,.035);
+}
+
+.danger-zone-option .settings-option-copy strong {
+  color: #ffe9ee;
+}
+
+.danger-zone-option .settings-option-copy small {
+  color: #9b8190;
+}
+
+.danger-zone-option .settings-option-chevron {
+  color: #d78597;
+}
+
+.danger-zone-card {
+  position: relative;
+  border-color: transparent !important;
+  background:
+    linear-gradient(#061224, #061224) padding-box,
+    linear-gradient(120deg, rgba(77,246,255,.16), rgba(75,141,255,.10) 46%, rgba(255, 72, 105, .30)) border-box !important;
+  box-shadow:
+    0 24px 75px rgba(0,0,0,.34),
+    0 0 28px rgba(255,72,105,.035),
+    inset 0 1px rgba(255,255,255,.04);
+}
+
+.danger-zone-kicker {
+  display: inline-flex;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 88, 112, .20);
+  border-radius: 999px;
+  background: rgba(107, 24, 44, .10);
+  color: #ff8298;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.danger-zone-card .account-section-heading h2 {
+  color: #fff0f3;
+}
+
+.danger-zone-card .account-section-note {
+  max-width: 650px;
+}
+
+.danger-zone-action {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 78px;
+  margin-top: 10px;
+  padding: 13px 15px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(34, 10, 22, .96), rgba(8, 20, 39, .98)) padding-box,
+    linear-gradient(105deg, rgba(255, 82, 113, .50), rgba(255, 63, 127, .28) 48%, rgba(92, 141, 255, .18)) border-box;
+  color: #fff;
+  text-align: left;
+  box-shadow:
+    0 14px 34px rgba(83, 10, 35, .16),
+    0 0 22px rgba(255, 59, 104, .055),
+    inset 0 1px rgba(255,255,255,.045);
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+}
+
+.danger-zone-action:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+  box-shadow:
+    0 16px 40px rgba(83, 10, 35, .20),
+    0 0 24px rgba(255, 59, 104, .08),
+    0 0 18px rgba(75, 141, 255, .035),
+    inset 0 1px rgba(255,255,255,.055);
+}
+
+.danger-zone-action:active {
+  transform: translateY(0) scale(.995);
+}
+
+.danger-zone-action-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 91, 119, .24);
+  border-radius: 12px;
+  background: rgba(80, 17, 35, .45);
+  color: #ff8299;
+  box-shadow:
+    0 0 13px rgba(255, 72, 105, .07),
+    inset 0 1px rgba(255,255,255,.035);
+}
+
+.danger-zone-action-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.danger-zone-action .settings-option-copy strong {
+  color: #fff1f4;
+}
+
+.danger-zone-action .settings-option-copy small {
+  color: #a9939e;
+}
+
+.danger-zone-action .settings-option-chevron {
+  color: #e28fa1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .danger-zone-option::after,
+  .danger-zone-action::after {
+    display: none;
+  }
+}
+\n
