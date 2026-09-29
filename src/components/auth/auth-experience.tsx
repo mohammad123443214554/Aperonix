@@ -87,6 +87,7 @@ export default function AuthExperience() {
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>(() => screenForPath(pathname));
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [showSessionSpinner, setShowSessionSpinner] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
 
   const [firstName, setFirstName] = useState("");
@@ -118,6 +119,19 @@ export default function AuthExperience() {
       }
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (!sessionLoading) {
+      setShowSessionSpinner(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowSessionSpinner(true);
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [sessionLoading]);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -299,11 +313,13 @@ export default function AuthExperience() {
   }
 
   if (sessionLoading) {
-    return (
+    return showSessionSpinner ? (
       <main className="auth-loading">
         <img src="/aperonix-logo.png" alt="Aperonix AI" />
         <div className="auth-loading-ring" />
       </main>
+    ) : (
+      <main className="auth-loading" aria-hidden="true" />
     );
   }
 
