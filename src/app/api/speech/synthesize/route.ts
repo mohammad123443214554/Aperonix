@@ -4,40 +4,78 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 
 const MAX_INPUT_CHARS = 30000;
-const WORDS_PER_CHUNK = 110;
+const CHUNK_SIZE = 4500;
+const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 
-function escapeXml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+function splitIntoChunks(text: string) {
+  const chunks: string[] = [];
+  let current = "";
 
-function splitWords(text: string) {
-  return text.trim().split(/\s+/).filter(Boolean);
-}
+  for (const paragraph of text.split(/\n{2,}/)) {
+    const cleanParagraph = paragraph.trim();
+    if (!cleanParagraph) continue;
 
-function buildChunks(words: string[]) {
-  const chunks: string[][] = [];
+    if ((current + " " + cleanParagraph).trim().length <= CHUNK_SIZE) {
+      current = (current + " " + cleanParagraph).trim();
+      continue;
+    }
 
-  for (let index = 0; index < words.length; index += WORDS_PER_CHUNK) {
-    chunks.push(words.slice(index, index + WORDS_PER_CHUNK));
+    if (current) chunks.push(current);
+
+    let remainder = cleanParagraph;
+    while (remainder.length > CHUNK_SIZE) {
+      const slice = remainder.slice(0, CHUNK_SIZE);
+      const breakAt = Math.max(
+        slice.lastIndexOf(". "),
+        slice.lastIndexOf("! "),
+        slice.lastIndexOf("? "),
+        slice.lastIndexOf(" "),
+        1
+      );
+
+      chunks.push(remainder.slice(0, breakAt).trim());
+      remainder = remainder.slice(breakAt).trim();
+    }
+
+    current = remainder;
   }
+
+  if (current) chunks.push(current);
 
   return chunks;
 }
 
-function buildSsml(words: string[], startIndex: number) {
-  const body = words
-    .map(
-      (word, index) =>
-        `<mark name="w${startIndex + index}"/>${escapeXml(word)}`
-    )
-    .join(" ");
+function buildWordTimepoints(alignment: {
+  characters?: string[];
+  character_start_times_seconds?: number[];
+}) {
+  const characters = alignment.characters ?? [];
+  const starts = alignment.character_start_times_seconds ?? [];
+  const timepoints: Array<{ index: number; timeSeconds: number }> = [];
 
-  return `<speak>${body}</speak>`;
+  let wordIndex = -1;
+  let inWord = false;
+
+  for (let index = 0; index < characters.length; index += 1) {
+    const character = characters[index] ?? "";
+
+    if (/\s/u.test(character)) {
+      inWord = false;
+      continue;
+    }
+
+    if (!inWord) {
+      wordIndex += 1;
+      inWord = true;
+
+      timepoints.push({
+        index: wordIndex,
+        timeSeconds: Number(starts[index] ?? 0)
+      });
+    }
+  }
+
+  return timepoints;
 }
 
 export async function POST(request: Request) {
@@ -49,11 +87,12 @@ export async function POST(request: Request) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-    const googleApiKey = process.env.GOOGLE_TTS_API_KEY;
+    const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
+    const voiceId = process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID;
 
-    if (!supabaseUrl || !supabaseKey || !googleApiKey || !accessToken) {
+    if (!supabaseUrl || !supabaseKey || !elevenLabsApiKey || !accessToken) {
       return NextResponse.json(
-        { error: "Google Cloud Text-to-Speech is not configured." },
+        { error: "ElevenLabs Text-to-Speech is not configured." },
         { status: 503 }
       );
     }
@@ -82,7 +121,6 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       text?: string;
-      languageCode?: string;
     };
 
     const text = typeof body.text === "string" ? body.text.trim() : "";
@@ -101,46 +139,31 @@ export async function POST(request: Request) {
       );
     }
 
-    const languageCode =
-      body.languageCode === "hi-IN" ? "hi-IN" : "en-IN";
-
-    const voiceName = `${languageCode}-Chirp3-HD-Aoede`;
-    const words = splitWords(text);
-    const wordChunks = buildChunks(words);
+    const textChunks = splitIntoChunks(text);
     const chunks: Array<{
       audioContent: string;
-      timepoints: Array<{ index: number; timeSeconds: number }>;
       words: string[];
+      timepoints: Array<{ index: number; timeSeconds: number }>;
     }> = [];
 
     const chunkWordOffsets: number[] = [];
+    let globalWordOffset = 0;
 
-    for (let chunkIndex = 0; chunkIndex < wordChunks.length; chunkIndex += 1) {
-      const chunkWords = wordChunks[chunkIndex];
-      const wordOffset = chunkIndex * WORDS_PER_CHUNK;
-      chunkWordOffsets.push(wordOffset);
+    for (const chunkText of textChunks) {
+      const words = chunkText.split(/\s+/).filter(Boolean);
+      chunkWordOffsets.push(globalWordOffset);
 
       const response = await fetch(
-        "https://texttospeech.googleapis.com/v1beta1/text:synthesize",
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128&enable_logging=false`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-goog-api-key": googleApiKey
+            "xi-api-key": elevenLabsApiKey
           },
           body: JSON.stringify({
-            input: {
-              ssml: buildSsml(chunkWords, wordOffset)
-            },
-            voice: {
-              languageCode,
-              name: voiceName
-            },
-            audioConfig: {
-              audioEncoding: "MP3",
-              speakingRate: 0.96
-            },
-            enableTimePointing: ["SSML_MARK"]
+            text: chunkText,
+            model_id: "eleven_multilingual_v2"
           }),
           cache: "no-store"
         }
@@ -148,42 +171,31 @@ export async function POST(request: Request) {
 
       const result = await response.json();
 
-      if (!response.ok || !result.audioContent) {
-        console.error("Google Cloud TTS error:", result);
+      if (!response.ok || !result.audio_base64) {
+        console.error("ElevenLabs TTS error:", result);
         return NextResponse.json(
-          { error: "Google Cloud Text-to-Speech could not synthesize this response." },
+          { error: "ElevenLabs could not synthesize this response." },
           { status: 502 }
         );
       }
 
-      const timepoints = Array.isArray(result.timepoints)
-        ? result.timepoints
-            .map((timepoint: { markName?: string; timeSeconds?: number }) => ({
-              index: Number(String(timepoint.markName ?? "").replace("w", "")) - wordOffset,
-              timeSeconds: Number(timepoint.timeSeconds ?? 0)
-            }))
-            .filter(
-              (timepoint: { index: number; timeSeconds: number }) =>
-                Number.isInteger(timepoint.index) &&
-                timepoint.index >= 0 &&
-                timepoint.index < chunkWords.length
-            )
-        : [];
-
       chunks.push({
-        audioContent: result.audioContent,
-        timepoints,
-        words: chunkWords
+        audioContent: result.audio_base64,
+        words,
+        timepoints: buildWordTimepoints(result.alignment ?? {})
       });
+
+      globalWordOffset += words.length;
     }
 
     return NextResponse.json({
       chunks,
-      words,
+      words: text.split(/\s+/).filter(Boolean),
       chunkWordOffsets
     });
   } catch (error) {
-    console.error("Google Cloud TTS route error:", error);
+    console.error("ElevenLabs TTS route error:", error);
+
     return NextResponse.json(
       { error: "Could not start Read Aloud." },
       { status: 500 }
