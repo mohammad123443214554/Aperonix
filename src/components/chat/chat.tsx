@@ -2174,6 +2174,22 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
                       <button
                         type="button"
+                        className="message-action-button share-response-button"
+                        onClick={() => void openShareModal(message, index)}
+                        disabled={isLoading || !message.id || shareCreatingMessageKey === messageReadAloudKey(message, index)}
+                        aria-label="Share response"
+                        title={shareCreatingMessageKey === messageReadAloudKey(message, index) ? "Preparing share link" : "Share"}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="18" cy="5" r="2.3" />
+                          <circle cx="6" cy="12" r="2.3" />
+                          <circle cx="18" cy="19" r="2.3" />
+                          <path d="m8.1 10.9 7.7-4.5M8.1 13.1l7.7 4.5" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
                         className={`message-action-button read-aloud-button ${readAloudMessageKey === messageReadAloudKey(message, index) ? "is-reading" : ""}`}
                         onClick={() => {
                           const key = messageReadAloudKey(message, index);
