@@ -3952,6 +3952,44 @@ body {
     0 0 15px rgba(255,59,189,.045);
 }
 
+.profile-photo-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-photo-change-button:disabled,
+.profile-photo-remove-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+  transform: none;
+}
+
+.profile-photo-remove-button {
+  align-self: flex-start;
+  min-height: 33px;
+  margin-top: 4px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, rgba(255,100,160,.46), rgba(255,59,189,.28)) border-box;
+  color: #ff9fc8;
+  font-size: 10px;
+  font-weight: 750;
+  transition: transform 150ms ease, box-shadow 160ms ease, color 160ms ease;
+}
+
+.profile-photo-remove-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  color: #ffd7e9;
+  box-shadow:
+    0 0 13px rgba(255,100,160,.10),
+    0 0 15px rgba(255,59,189,.055);
+}
+
 .profile-photo-file-input {
   position: fixed;
   width: 1px;
