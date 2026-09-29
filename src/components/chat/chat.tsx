@@ -1220,12 +1220,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     try {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
       if (sessionError || !sessionData.session) {
         throw sessionError ?? new Error("Your session has expired.");
       }
 
-      const languageCode = /[\\u0900-\\u097F]/.test(text) ? "hi-IN" : "en-IN";
+      const languageCode = /[\u0900-\u097F]/.test(text) ? "hi-IN" : "en-IN";
       const response = await fetch("/api/speech/synthesize", {
         method: "POST",
         headers: {
@@ -1237,22 +1236,19 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       });
 
       const data = await response.json();
-
       if (!response.ok || !Array.isArray(data.chunks)) {
         throw new Error(data.error || "Could not start Read Aloud.");
       }
 
       if (generation !== readAloudGenerationRef.current) return;
 
-      const totalWords = Array.isArray(data.words) ? data.words : [];
       const chunks = data.chunks as Array<{
         audioContent: string;
         words: string[];
         timepoints: Array<{ index: number; timeSeconds: number }>;
       }>;
-
       const chunkWordOffsets = Array.isArray(data.chunkWordOffsets)
-        ? data.chunkWordOffsets as number[]
+        ? (data.chunkWordOffsets as number[])
         : [];
 
       const playChunk = async (chunkIndex: number) => {
@@ -1260,11 +1256,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         const chunk = chunks[chunkIndex];
         if (!chunk) {
-          setReadAloudMessageKey(null);
-          setReadAloudStatus("idle");
-          setReadAloudWordIndex(null);
-          readAloudAudioRef.current = null;
-          clearReadAloudObjectUrl();
+          stopReadAloud();
           return;
         }
 
@@ -1316,10 +1308,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         await audio.play();
       };
-
-      if (totalWords.length === 0 || chunks.length === 0) {
-        throw new Error("Google Cloud TTS returned no audio.");
-      }
 
       await playChunk(0);
     } catch (error) {
