@@ -1088,7 +1088,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ messages: retryContext.map(({ role, content }) => ({ role, content })) })
+        body: JSON.stringify({
+          messages: retryContext.map(({ role, content }) => ({ role, content })),
+          aperonixSetting
+        })
       });
 
       const data = await response.json();
@@ -1245,7 +1248,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`
         },
-        body: JSON.stringify({ messages: nextMessages })
+        body: JSON.stringify({
+          messages: nextMessages,
+          aperonixSetting
+        })
       });
 
       const data = await response.json();
