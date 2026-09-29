@@ -1434,6 +1434,105 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  async function copyTextToClipboard(text: string) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const helper = document.createElement("textarea");
+    helper.value = text;
+    helper.setAttribute("readonly", "");
+    helper.style.position = "fixed";
+    helper.style.opacity = "0";
+    document.body.appendChild(helper);
+    helper.select();
+    const copied = document.execCommand("copy");
+    helper.remove();
+
+    if (!copied) throw new Error("Could not copy the link.");
+  }
+
+  async function createShareLink(message: ChatMessage) {
+    if (!activeSession || !message.id) {
+      throw new Error("This response is not ready to share yet.");
+    }
+
+    let { data: sessionData } = await supabase.auth.getSession();
+
+    if (!sessionData.session) {
+      const refreshed = await supabase.auth.refreshSession();
+      sessionData = refreshed.data;
+    }
+
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error("Your session has expired. Please sign in again.");
+
+    const response = await fetch("/api/share", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + accessToken
+      },
+      body: JSON.stringify({
+        chatId: activeSession.id,
+        messageId: message.id
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok || typeof data.url !== "string") {
+      throw new Error(data.error || "Could not create a share link.");
+    }
+
+    return data.url as string;
+  }
+
+  async function openShareModal(message: ChatMessage, index: number) {
+    const key = messageReadAloudKey(message, index);
+    if (shareCreatingMessageKey) return;
+
+    setShareCreatingMessageKey(key);
+
+    try {
+      const url = await createShareLink(message);
+      setShareModal({ url, content: message.content, copied: false });
+    } catch (error) {
+      console.error("Create share link error:", error);
+    } finally {
+      setShareCreatingMessageKey(null);
+    }
+  }
+
+  async function shareViaDevice() {
+    if (!shareModal || typeof navigator === "undefined" || typeof navigator.share !== "function") return;
+
+    try {
+      await navigator.share({
+        title: "Aperonix AI response",
+        text: "A response shared from Aperonix AI.",
+        url: shareModal.url
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error("Native share error:", error);
+    }
+  }
+
+  async function copyShareLink() {
+    if (!shareModal) return;
+
+    try {
+      await copyTextToClipboard(shareModal.url);
+      setShareModal((current) => current ? { ...current, copied: true } : current);
+      window.setTimeout(() => {
+        setShareModal((current) => current ? { ...current, copied: false } : current);
+      }, 1600);
+    } catch (error) {
+      console.error("Copy share link error:", error);
+    }
+  }
+
   async function handleFeedback(message: ChatMessage, feedback: FeedbackType) {
     if (isLoading || !activeSession || !message.id) return;
 
