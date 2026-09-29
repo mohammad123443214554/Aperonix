@@ -262,8 +262,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [pinFlashId, setPinFlashId] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, FeedbackType>>({});
-  const [shareModal, setShareModal] = useState<{ url: string; content: string; copied: boolean } | null>(null);
-  const [shareCreatingMessageKey, setShareCreatingMessageKey] = useState<string | null>(null);
+  const [shareModal, setShareModal] = useState<{
+    url: string | null;
+    content: string;
+    copied: boolean;
+    preparing: boolean;
+  } | null>(null);
   const [nativeShareSupported, setNativeShareSupported] = useState(false);
   const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
   const [isRecentSectionOpen, setIsRecentSectionOpen] = useState(true);
@@ -1497,22 +1501,33 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
   async function openShareModal(message: ChatMessage, index: number) {
     const key = messageReadAloudKey(message, index);
-    if (shareCreatingMessageKey) return;
 
-    setShareCreatingMessageKey(key);
+    setShareModal({
+      url: null,
+      content: message.content,
+      copied: false,
+      preparing: true
+    });
 
     try {
       const url = await createShareLink(message);
-      setShareModal({ url, content: message.content, copied: false });
+      setShareModal((current) =>
+        current && current.content === message.content
+          ? { ...current, url, preparing: false }
+          : current
+      );
     } catch (error) {
       console.error("Create share link error:", error);
-    } finally {
-      setShareCreatingMessageKey(null);
+      setShareModal((current) =>
+        current && current.content === message.content
+          ? { ...current, preparing: false }
+          : current
+      );
     }
   }
 
   async function shareViaDevice() {
-    if (!shareModal || typeof navigator === "undefined" || typeof navigator.share !== "function") return;
+    if (!shareModal?.url || typeof navigator === "undefined" || typeof navigator.share !== "function") return;
 
     try {
       await navigator.share({
@@ -1527,7 +1542,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }
 
   async function copyShareLink() {
-    if (!shareModal) return;
+    if (!shareModal?.url) return;
 
     try {
       await copyTextToClipboard(shareModal.url);
@@ -2183,9 +2198,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                         type="button"
                         className="message-action-button share-response-button"
                         onClick={() => void openShareModal(message, index)}
-                        disabled={isLoading || !message.id || shareCreatingMessageKey === messageReadAloudKey(message, index)}
+                        disabled={isLoading || !message.id}
                         aria-label="Share response"
-                        title={shareCreatingMessageKey === messageReadAloudKey(message, index) ? "Preparing share link" : "Share"}
+                        title="Share"
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <circle cx="18" cy="5" r="2.3" />
@@ -2886,15 +2901,32 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             </div>
 
             <div className="share-link-box">
-              <span>{shareModal.url}</span>
+              <span>
+                {shareModal.preparing
+                  ? "Preparing secure share link..."
+                  : shareModal.url ?? "Share link could not be created."}
+              </span>
             </div>
+
+            {shareModal.preparing && (
+              <div className="share-preparing-status" role="status" aria-live="polite">
+                <span className="share-preparing-spinner" aria-hidden="true" />
+                <span>Preparing secure share link…</span>
+              </div>
+            )}
+
+            {!shareModal.preparing && !shareModal.url && (
+              <div className="share-preparing-error" role="status">
+                Couldn’t create the share link. Please close this window and try again.
+              </div>
+            )}
 
             <div className="share-modal-actions">
               <button
                 type="button"
                 className="share-modal-button share-native-button"
                 onClick={() => void shareViaDevice()}
-                disabled={!nativeShareSupported}
+                disabled={!nativeShareSupported || shareModal.preparing || !shareModal.url}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="18" cy="5" r="2.3" />
@@ -2909,6 +2941,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 type="button"
                 className="share-modal-button share-copy-button"
                 onClick={() => void copyShareLink()}
+                disabled={shareModal.preparing || !shareModal.url}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <rect x="8" y="8" width="11" height="11" rx="2" />
