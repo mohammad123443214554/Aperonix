@@ -1281,7 +1281,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       if (generation !== speechGenerationRef.current) return;
 
-      const isHindi = /[\\u0900-\\u097F]/.test(text);
+      const isHindi = /[\u0900-\u097F]/.test(text);
       const voice = isHindi ? "hi-IN-KavyaNeural" : "en-US-JennyNeural";
       const language = isHindi ? "hi-IN" : "en-US";
 
