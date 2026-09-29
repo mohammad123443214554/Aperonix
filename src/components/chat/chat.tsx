@@ -1,7 +1,19 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import {
+  ChangeEvent,
+  Children,
+  FormEvent,
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -1185,10 +1197,69 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     return Math.max(0, (words?.length ?? 1) - 1);
   }
 
-  function pickSweetFemaleVoice(voices: SpeechSynthesisVoice[]) {
-    const preferredNames = [
-      "Microsoft Zira",
+  function buildSpeechSegments(text: string) {
+    const tokens = text.match(/\S+(?:\s+|$)/g) ?? [];
+    const segments: Array<{
+      text: string;
+      languageCode: "hi-IN" | "en-IN";
+      wordOffset: number;
+    }> = [];
+
+    let currentLanguage: "hi-IN" | "en-IN" = "en-IN";
+    let currentText = "";
+    let wordOffset = 0;
+    let currentWordOffset = 0;
+
+    for (const token of tokens) {
+      const trimmed = token.trim();
+      const letter = trimmed.match(/\p{L}/u)?.[0];
+      const tokenLanguage: "hi-IN" | "en-IN" =
+        letter && /[\u0900-\u097F]/u.test(letter) ? "hi-IN" : currentLanguage;
+
+      if (!currentText) {
+        currentLanguage = tokenLanguage;
+        currentWordOffset = wordOffset;
+      }
+
+      if (tokenLanguage !== currentLanguage && currentText.trim()) {
+        segments.push({
+          text: currentText.trim(),
+          languageCode: currentLanguage,
+          wordOffset: currentWordOffset
+        });
+        currentText = "";
+        currentLanguage = tokenLanguage;
+        currentWordOffset = wordOffset;
+      }
+
+      currentText += token;
+      wordOffset += 1;
+    }
+
+    if (currentText.trim()) {
+      segments.push({
+        text: currentText.trim(),
+        languageCode: currentLanguage,
+        wordOffset: currentWordOffset
+      });
+    }
+
+    return segments;
+  }
+
+  function pickHindiVoice(voices: SpeechSynthesisVoice[]) {
+    return (
+      voices.find((voice) => /^hi-IN$/i.test(voice.lang)) ??
+      voices.find((voice) => /^hi(?:[-_])/i.test(voice.lang)) ??
+      voices.find((voice) => /\bHindi\b/i.test(voice.name))
+    );
+  }
+
+  function pickEnglishVoice(voices: SpeechSynthesisVoice[]) {
+    const englishVoices = voices.filter((voice) => /^en(?:[-_])/i.test(voice.lang));
+    const preferred = [
       "Microsoft Jenny",
+      "Microsoft Zira",
       "Google UK English Female",
       "Google US English Female",
       "Samantha",
@@ -1197,22 +1268,36 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       "Ava"
     ];
 
-    for (const name of preferredNames) {
-      const match = voices.find((voice) =>
+    for (const name of preferred) {
+      const match = englishVoices.find((voice) =>
         voice.name.toLocaleLowerCase().includes(name.toLocaleLowerCase())
       );
       if (match) return match;
     }
 
-    return voices.find((voice) =>
-      /female|woman|zira|jenny|samantha|karen|ava|moira/i.test(voice.name)
+    return (
+      englishVoices.find((voice) => /^en-IN$/i.test(voice.lang)) ??
+      englishVoices.find((voice) => /^en-(GB|US|AU|CA)$/i.test(voice.lang)) ??
+      englishVoices[0]
     );
+  }
+
+  function finishReadAloud(generation: number) {
+    if (generation !== readAloudGenerationRef.current) return;
+
+    readAloudUtteranceRef.current = null;
+    setReadAloudMessageKey(null);
+    setReadAloudStatus("idle");
+    setReadAloudWordIndex(null);
   }
 
   function stopReadAloud() {
     readAloudGenerationRef.current += 1;
 
-    window.speechSynthesis.cancel();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
     readAloudUtteranceRef.current = null;
     setReadAloudMessageKey(null);
     setReadAloudStatus("idle");
@@ -1221,78 +1306,119 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
   function startReadAloud(message: ChatMessage, index: number) {
     const text = toSpeechText(message.content);
-    if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    if (
+      !text ||
+      typeof window === "undefined" ||
+      !("speechSynthesis" in window) ||
+      typeof SpeechSynthesisUtterance === "undefined"
+    ) {
+      return;
+    }
 
     stopReadAloud();
 
     const generation = readAloudGenerationRef.current + 1;
     readAloudGenerationRef.current = generation;
     const messageKey = messageReadAloudKey(message, index);
+    const segments = buildSpeechSegments(text);
+
+    if (segments.length === 0) return;
 
     setReadAloudMessageKey(messageKey);
     setReadAloudStatus("loading");
     setReadAloudWordIndex(null);
 
-    const speak = () => {
-      if (generation !== readAloudGenerationRef.current) return;
+    let started = false;
+    let segmentIndex = 0;
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      const voices = window.speechSynthesis.getVoices();
-      const isHindi = /[\u0900-\u097F]/.test(text);
+    const speakCurrentSegment = (voices: SpeechSynthesisVoice[]) => {
+      if (started || generation !== readAloudGenerationRef.current) return;
+      started = true;
 
-      if (isHindi) {
-        const hindiVoice = voices.find((voice) =>
-          /^hi[-_]/i.test(voice.lang) || /Hindi/i.test(voice.name)
-        );
-        if (hindiVoice) utterance.voice = hindiVoice;
-      } else {
-        const femaleVoice = pickSweetFemaleVoice(voices);
-        if (femaleVoice) utterance.voice = femaleVoice;
-      }
+      const speakSegment = () => {
+        if (generation !== readAloudGenerationRef.current) return;
 
-      utterance.lang = isHindi ? "hi-IN" : "en-IN";
-      utterance.rate = 0.94;
-      utterance.pitch = 1.05;
-      utterance.volume = 1;
-
-      utterance.onstart = () => {
-        if (generation === readAloudGenerationRef.current) {
-          setReadAloudStatus("speaking");
+        const segment = segments[segmentIndex];
+        if (!segment) {
+          finishReadAloud(generation);
+          return;
         }
+
+        const utterance = new SpeechSynthesisUtterance(segment.text);
+        const voice =
+          segment.languageCode === "hi-IN"
+            ? pickHindiVoice(voices)
+            : pickEnglishVoice(voices);
+
+        if (voice) utterance.voice = voice;
+
+        utterance.lang = segment.languageCode;
+        utterance.rate = 0.94;
+        utterance.pitch = 1.03;
+        utterance.volume = 1;
+
+        utterance.onstart = () => {
+          if (generation === readAloudGenerationRef.current) {
+            setReadAloudStatus("speaking");
+          }
+        };
+
+        utterance.onboundary = (event) => {
+          if (generation !== readAloudGenerationRef.current) return;
+          if (event.name && event.name !== "word") return;
+
+          const localIndex = wordIndexAtCharacter(
+            segment.text,
+            event.charIndex ?? 0
+          );
+
+          setReadAloudWordIndex(segment.wordOffset + localIndex);
+        };
+
+        utterance.onend = () => {
+          if (generation !== readAloudGenerationRef.current) return;
+
+          readAloudUtteranceRef.current = null;
+          segmentIndex += 1;
+          speakSegment();
+        };
+
+        utterance.onerror = () => {
+          if (generation !== readAloudGenerationRef.current) return;
+          finishReadAloud(generation);
+        };
+
+        readAloudUtteranceRef.current = utterance;
+        window.speechSynthesis.speak(utterance);
       };
 
-      utterance.onboundary = (event) => {
-        if (generation !== readAloudGenerationRef.current) return;
-        if (event.name && event.name !== "word") return;
-        setReadAloudWordIndex(wordIndexAtCharacter(text, event.charIndex ?? 0));
-      };
-
-      utterance.onend = () => {
-        if (generation !== readAloudGenerationRef.current) return;
-        readAloudUtteranceRef.current = null;
-        setReadAloudMessageKey(null);
-        setReadAloudStatus("idle");
-        setReadAloudWordIndex(null);
-      };
-
-      utterance.onerror = () => {
-        if (generation !== readAloudGenerationRef.current) return;
-        readAloudUtteranceRef.current = null;
-        setReadAloudMessageKey(null);
-        setReadAloudStatus("idle");
-        setReadAloudWordIndex(null);
-      };
-
-      readAloudUtteranceRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
+      speakSegment();
     };
 
-    if (window.speechSynthesis.getVoices().length > 0) {
-      speak();
-    } else {
-      window.speechSynthesis.addEventListener("voiceschanged", speak, { once: true });
+    const voices = window.speechSynthesis.getVoices();
+
+    if (voices.length > 0) {
+      speakCurrentSegment(voices);
+      return;
     }
+
+    const handleVoicesChanged = () => {
+      const availableVoices = window.speechSynthesis.getVoices();
+      if (availableVoices.length > 0) {
+        window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
+        speakCurrentSegment(availableVoices);
+      }
+    };
+
+    window.speechSynthesis.addEventListener("voiceschanged", handleVoicesChanged);
+
+    window.setTimeout(() => {
+      window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
+      speakCurrentSegment(window.speechSynthesis.getVoices());
+    }, 900);
   }
+
   async function copyMessage(message: ChatMessage) {
     try {
       await navigator.clipboard.writeText(message.content);
