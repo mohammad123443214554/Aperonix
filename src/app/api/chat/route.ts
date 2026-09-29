@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     // Keep the user's JWT attached to every Supabase request made in
     // this route. Without this, auth.getUser(token) can succeed while
-    // the following profiles query is executed as an anonymous request
+    // The following profiles query is executed as an anonymous request
     // and RLS can hide the saved Aperonix setting.
     const authClient = createClient(supabaseUrl, supabaseKey, {
       global: {
