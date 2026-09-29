@@ -2112,44 +2112,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
                       <button
                         type="button"
-                        className={`message-action-button read-aloud-button ${readAloudMessageKey === messageReadAloudKey(message, index) ? "is-reading" : ""}`}
-                        onClick={() => {
-                          const key = messageReadAloudKey(message, index);
-                          if (readAloudMessageKey === key && readAloudStatus !== "idle") {
-                            stopReadAloud();
-                          } else {
-                            void startReadAloud(message, index);
-                          }
-                        }}
-                        aria-label={
-                          readAloudMessageKey === messageReadAloudKey(message, index) &&
-                          readAloudStatus !== "idle"
-                            ? "Stop reading"
-                            : "Read response aloud"
-                        }
-                        title={
-                          readAloudMessageKey === messageReadAloudKey(message, index) &&
-                          readAloudStatus !== "idle"
-                            ? "Stop"
-                            : "Read aloud"
-                        }
-                      >
-                        {readAloudMessageKey === messageReadAloudKey(message, index) &&
-                        readAloudStatus !== "idle" ? (
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <rect x="7.5" y="7.5" width="9" height="9" rx="1.4" />
-                          </svg>
-                        ) : (
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M5.5 9.5v5l3.1 2.4h2.1V7.1H8.6L5.5 9.5Z" />
-                            <path d="M14.1 9.2a4.3 4.3 0 0 1 0 5.6" />
-                            <path d="M16.7 6.8a7.8 7.8 0 0 1 0 10.4" />
-                          </svg>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
                         className="message-action-button"
                         onClick={() => void retryMessage(index)}
                         disabled={isLoading}
