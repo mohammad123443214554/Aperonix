@@ -27,7 +27,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const authClient = createClient(supabaseUrl, supabaseKey);
+    // Keep the user's JWT attached to every Supabase request made in
+    // this route. Without this, auth.getUser(token) can succeed while
+    // the following profiles query is executed as an anonymous request
+    // and RLS can hide the saved Aperonix setting.
+    const authClient = createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }
+    });
+
     const { data: authData, error: authError } = await authClient.auth.getUser(
       accessToken
     );
@@ -69,7 +80,7 @@ export async function POST(request: Request) {
       .eq("id", authData.user.id)
       .maybeSingle();
 
-    if (profileError && !/column .*aperonix_setting.*does not exist|schema cache/i.test(profileError.message)) {
+    if (profileError) {
       console.error("Aperonix setting load error:", profileError);
     }
 
