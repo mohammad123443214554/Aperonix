@@ -148,6 +148,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aperonixSettingOpen, setAperonixSettingOpen] = useState(false);
   const [aperonixSetting, setAperonixSetting] = useState("");
   const [settingsDraft, setSettingsDraft] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -686,12 +687,18 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
 
   function openSettings() {
-    setSettingsDraft(aperonixSetting);
     setSettingsError("");
+    setAperonixSettingOpen(false);
     setSettingsOpen(true);
     setProfileOpen(false);
     setProfileDetailsOpen(false);
     setProfileEditOpen(false);
+  }
+
+  function openAperonixSetting() {
+    setSettingsDraft(aperonixSetting);
+    setSettingsError("");
+    setAperonixSettingOpen(true);
   }
 
   async function saveAperonixSetting() {
@@ -1784,74 +1791,96 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             <button
               type="button"
               className="account-page-back"
-              onClick={() => setSettingsOpen(false)}
+              onClick={() => {
+                if (aperonixSettingOpen) {
+                  setAperonixSettingOpen(false);
+                  setSettingsError("");
+                  setSettingsDraft(aperonixSetting);
+                } else {
+                  setSettingsOpen(false);
+                }
+              }}
               disabled={settingsSaving}
             >
               <span>←</span> Back
             </button>
-            <span className="account-page-title">Settings</span>
+            <span className="account-page-title">
+              {aperonixSettingOpen ? "Aperonix setting" : "Settings"}
+            </span>
           </div>
 
           <div className="account-page-content">
-            <div className="account-section-card settings-card">
-              <div className="account-section-heading">
-                <div>
-                  <span className="hero-kicker">Personalize your AI</span>
-                  <h2>Aperonix setting</h2>
-                  <p className="account-section-note">
-                    Write in any language about how you want Aperonix to behave for you.
-                    This personal setting can shape its responses, while Aperonix's core identity and protected rules stay unchanged.
-                  </p>
+            {!aperonixSettingOpen ? (
+              <div className="settings-options-card">
+                <button
+                  type="button"
+                  className="settings-option"
+                  onClick={openAperonixSetting}
+                >
+                  <span className="settings-option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12 3.8 13.7 9l5.1 1.7-5.1 1.7L12 17.6l-1.7-5.2-5.1-1.7L10.3 9 12 3.8Z" />
+                      <path d="m18.5 4.2.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" />
+                    </svg>
+                  </span>
+                  <span className="settings-option-copy">
+                    <strong>Aperonix setting</strong>
+                    <small>Choose how Aperonix should behave and respond to you.</small>
+                  </span>
+                  <span className="settings-option-chevron" aria-hidden="true">›</span>
+                </button>
+              </div>
+            ) : (
+              <div className="account-section-card settings-card">
+                <div className="account-section-heading">
+                  <div>
+                    <span className="hero-kicker">Personalize your AI</span>
+                    <h2>Aperonix setting</h2>
+                    <p className="account-section-note">
+                      Write in any language about how you want Aperonix to behave for you.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="aperonix-setting-field">
+                  <span>What should Aperonix be for you?</span>
+                  <textarea
+                    value={settingsDraft}
+                    onChange={(event) => setSettingsDraft(event.target.value)}
+                    maxLength={4000}
+                    placeholder="Example: Help me learn step by step, keep answers simple, and speak casually with me."
+                    rows={8}
+                    disabled={settingsSaving}
+                  />
+                  <small>{settingsDraft.length}/4000 characters</small>
+                </label>
+
+                {settingsError && <div className="auth-error">{settingsError}</div>}
+
+                <div className="account-modal-actions">
+                  <button
+                    type="button"
+                    className="modal-secondary"
+                    onClick={() => {
+                      setSettingsDraft(aperonixSetting);
+                      setSettingsError("");
+                      setAperonixSettingOpen(false);
+                    }}
+                    disabled={settingsSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="modal-primary"
+                    onClick={() => void saveAperonixSetting()}
+                    disabled={settingsSaving}
+                  >
+                    {settingsSaving ? "Saving..." : "Save setting"}
+                  </button>
                 </div>
               </div>
-
-              <label className="aperonix-setting-field">
-                <span>What should Aperonix be for you?</span>
-                <textarea
-                  value={settingsDraft}
-                  onChange={(event) => setSettingsDraft(event.target.value)}
-                  maxLength={4000}
-                  placeholder="Example: Help me learn step by step, keep answers simple, and speak casually with me."
-                  rows={8}
-                  disabled={settingsSaving}
-                />
-                <small>{settingsDraft.length}/4000 characters</small>
-              </label>
-
-              <div className="settings-protected-note">
-                <strong>Protected by Aperonix</strong>
-                <p>
-                  You cannot change Aperonix's name, creator, ownership, or core identity.
-                  Personalization also cannot turn Aperonix into a real person, romantic partner,
-                  or falsely claim to be Mohammad Khan.
-                </p>
-              </div>
-
-              {settingsError && <div className="auth-error">{settingsError}</div>}
-
-              <div className="account-modal-actions">
-                <button
-                  type="button"
-                  className="modal-secondary"
-                  onClick={() => {
-                    setSettingsDraft(aperonixSetting);
-                    setSettingsError("");
-                    setSettingsOpen(false);
-                  }}
-                  disabled={settingsSaving}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="modal-primary"
-                  onClick={() => void saveAperonixSetting()}
-                  disabled={settingsSaving}
-                >
-                  {settingsSaving ? "Saving..." : "Save setting"}
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         </section>
       )}
