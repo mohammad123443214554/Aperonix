@@ -4226,3 +4226,117 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+
+/* Profile photo editor: highest-priority layer + consistent Aperonix controls. */
+.photo-editor-backdrop {
+  z-index: 9999 !important;
+  position: fixed !important;
+  isolation: isolate;
+}
+
+.photo-editor-modal button,
+.photo-editor-close {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.photo-editor-modal .modal-primary,
+.photo-editor-modal .modal-secondary,
+.photo-filter-option,
+.photo-editor-close {
+  border-radius: 999px;
+}
+
+.photo-editor-modal .modal-primary,
+.photo-editor-modal .modal-secondary {
+  min-height: 42px;
+}
+
+.photo-editor-modal .modal-primary::after,
+.photo-editor-modal .modal-secondary::after,
+.photo-filter-option::after,
+.photo-editor-close::after {
+  content: "";
+  position: absolute;
+  width: 30%;
+  height: 185%;
+  top: -42%;
+  left: -57%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.21), transparent);
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.photo-editor-modal .modal-primary:hover::after,
+.photo-editor-modal .modal-secondary:hover::after,
+.photo-filter-option:hover::after,
+.photo-editor-close:hover::after {
+  transform: translateX(430%) rotate(18deg);
+}
+
+.photo-editor-modal .modal-primary,
+.photo-editor-modal .modal-secondary {
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 48%, var(--aperonix-magenta)) border-box;
+  color: #f4fbff;
+  border: 1px solid transparent;
+  box-shadow:
+    0 0 14px rgba(77,246,255,.07),
+    0 0 18px rgba(255,59,189,.04),
+    inset 0 1px rgba(255,255,255,.05);
+}
+
+.photo-editor-modal .modal-primary:hover,
+.photo-editor-modal .modal-secondary:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 17px rgba(77,246,255,.12),
+    0 0 22px rgba(255,59,189,.07);
+}
+
+.photo-filter-option {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.photo-filter-option > * {
+  position: relative;
+  z-index: 1;
+}
+
+.photo-filter-option.active {
+  box-shadow:
+    0 0 14px rgba(77,246,255,.10),
+    0 0 17px rgba(255,59,189,.05),
+    inset 0 1px rgba(255,255,255,.05);
+}
+
+.photo-editor-close {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(135deg, var(--aperonix-cyan), var(--aperonix-blue) 50%, var(--aperonix-magenta)) border-box;
+  box-shadow:
+    0 0 11px rgba(77,246,255,.07),
+    0 0 14px rgba(255,59,189,.04);
+}
+
+.photo-editor-controls input[type="range"] {
+  accent-color: #4df6ff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-editor-modal .modal-primary::after,
+  .photo-editor-modal .modal-secondary::after,
+  .photo-filter-option::after,
+  .photo-editor-close::after {
+    display: none;
+  }
+}
