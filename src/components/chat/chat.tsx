@@ -153,6 +153,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aperonixSettingOpen, setAperonixSettingOpen] = useState(false);
+  const [dangerZoneOpen, setDangerZoneOpen] = useState(false);
   const [aperonixSetting, setAperonixSetting] = useState("");
   const [settingsDraft, setSettingsDraft] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -192,8 +193,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   useEffect(() => {
     setProfileDetailsOpen(pathname === "/profile");
     setProfileEditOpen(pathname === "/profile/edit");
-    setSettingsOpen(pathname === "/settings" || pathname === "/settings/aperonix");
+    setSettingsOpen(
+      pathname === "/settings" ||
+      pathname === "/settings/aperonix" ||
+      pathname === "/settings/danger-zone"
+    );
     setAperonixSettingOpen(pathname === "/settings/aperonix");
+    setDangerZoneOpen(pathname === "/settings/danger-zone");
     setAccountDeleteOpen(pathname === "/account/delete");
 
     if (!pathname.startsWith("/profile/edit")) {
@@ -749,7 +755,15 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setSettingsDraft(aperonixSetting);
     setSettingsError("");
     setAperonixSettingOpen(true);
+    setDangerZoneOpen(false);
     router.push("/settings/aperonix");
+  }
+
+  function openDangerZone() {
+    setDangerZoneOpen(true);
+    setAperonixSettingOpen(false);
+    setSettingsError("");
+    router.push("/settings/danger-zone");
   }
 
   async function saveAperonixSetting() {
@@ -1607,19 +1621,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             <button type="button" onClick={openProfileEditor}>Edit profile</button>
             <button type="button" onClick={openSettings}>Settings</button>
             <button type="button" onClick={() => void onSignOut()} disabled={isLoading}>Sign out</button>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                setProfileOpen(false);
-                setAccountDeleteText("");
-                setAccountDeleteError("");
-                setAccountDeleteOpen(true);
-                router.push("/account/delete");
-              }}
-            >
-              Delete account
-            </button>
           </div>
         )}
       </aside>
@@ -1855,8 +1856,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               type="button"
               className="account-page-back"
               onClick={() => {
-                if (aperonixSettingOpen) {
+                if (aperonixSettingOpen || dangerZoneOpen) {
                   setAperonixSettingOpen(false);
+                  setDangerZoneOpen(false);
                   setSettingsError("");
                   setSettingsDraft(aperonixSetting);
                   router.push("/settings");
@@ -1870,12 +1872,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               <span>←</span> Back
             </button>
             <span className="account-page-title">
-              {aperonixSettingOpen ? "Aperonix setting" : "Settings"}
+              {aperonixSettingOpen
+                ? "Aperonix setting"
+                : dangerZoneOpen
+                  ? "Danger zone"
+                  : "Settings"}
             </span>
           </div>
 
           <div className="account-page-content">
-            {!aperonixSettingOpen ? (
+            {!aperonixSettingOpen && !dangerZoneOpen ? (
               <div className="settings-options-card">
                 <button
                   type="button"
@@ -1885,12 +1891,68 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   <span className="settings-option-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24">
                       <path d="M12 3.8 13.7 9l5.1 1.7-5.1 1.7L12 17.6l-1.7-5.2-5.1-1.7L10.3 9 12 3.8Z" />
-                      <path d="m18.5 4.2.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1Z" />
+                      <path d="m18.5 4.2.7 2.1 2.1.7-.7 2.1-2.1-.7-2.1-.7 2.1-.7.7-2.1Z" />
                     </svg>
                   </span>
                   <span className="settings-option-copy">
                     <strong>Aperonix setting</strong>
                     <small>Choose how Aperonix should behave and respond to you.</small>
+                  </span>
+                  <span className="settings-option-chevron" aria-hidden="true">›</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="settings-option danger-zone-option"
+                  onClick={openDangerZone}
+                >
+                  <span className="settings-option-icon danger-zone-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12 3.3 20 6.8v5.7c0 4-2.5 6.9-8 8.7-5.5-1.8-8-4.7-8-8.7V6.8l8-3.5Z" />
+                      <path d="M12 8.1v4.5" />
+                      <circle cx="12" cy="15.9" r=".8" />
+                    </svg>
+                  </span>
+                  <span className="settings-option-copy">
+                    <strong>Danger zone</strong>
+                    <small>Account actions that can permanently affect your Aperonix account.</small>
+                  </span>
+                  <span className="settings-option-chevron" aria-hidden="true">›</span>
+                </button>
+              </div>
+            ) : dangerZoneOpen ? (
+              <div className="account-section-card settings-card danger-zone-card">
+                <div className="account-section-heading">
+                  <div>
+                    <span className="danger-zone-kicker">ACCOUNT SAFETY</span>
+                    <h2>Danger zone</h2>
+                    <p className="account-section-note">
+                      These actions can permanently affect your account and cannot be easily undone.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="danger-zone-action"
+                  onClick={() => {
+                    setAccountDeleteText("");
+                    setAccountDeleteError("");
+                    setAccountDeleteOpen(true);
+                    router.push("/account/delete");
+                  }}
+                >
+                  <span className="danger-zone-action-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M5 7h14" />
+                      <path d="M9 7V4.8h6V7" />
+                      <path d="m7.5 7 .8 12.2h7.4L16.5 7" />
+                      <path d="M10 10.5v5.7M14 10.5v5.7" />
+                    </svg>
+                  </span>
+                  <span className="settings-option-copy">
+                    <strong>Delete account</strong>
+                    <small>Permanently delete your account, profile, chats, and associated data.</small>
                   </span>
                   <span className="settings-option-chevron" aria-hidden="true">›</span>
                 </button>
@@ -2228,7 +2290,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 setAccountDeleteOpen(false);
                 setAccountDeleteText("");
                 setAccountDeleteError("");
-                router.push("/chat");
+                router.push("/settings/danger-zone");
               }} disabled={accountDeleting}>Cancel</button>
               <button
                 type="button"
