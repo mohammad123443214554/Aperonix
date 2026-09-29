@@ -320,6 +320,29 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const synthesizer = speechSynthesizerRef.current;
+    speechGenerationRef.current += 1;
+    speechWordCursorRef.current = 0;
+    speechSynthesizerRef.current = null;
+
+    if (synthesizer) {
+      synthesizer.close();
+    }
+
+    setReadAloudMessageKey(null);
+    setReadAloudStatus("idle");
+    setReadAloudWordIndex(null);
+  }, [pathname]);
+
+  useEffect(() => {
+    return () => {
+      speechGenerationRef.current += 1;
+      speechSynthesizerRef.current?.close();
+      speechSynthesizerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     setProfileDetailsOpen(pathname === "/profile");
     setProfileEditOpen(pathname === "/profile/edit");
     setSettingsOpen(
@@ -535,6 +558,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
   function selectSession(id: string) {
     if (isLoading) return;
+    stopReadAloud();
     setActiveSessionId(id);
     setOpenMenuId(null);
     setIsSidebarOpen(false);
@@ -543,6 +567,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
   async function handleNewChat() {
     if (isLoading) return;
+    stopReadAloud();
 
     try {
       const user = await ensureAuthenticatedUser();
@@ -1179,6 +1204,207 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  function messageReadAloudKey(message: ChatMessage, index: number) {
+    return `${activeSession?.id ?? "session"}:${message.id ?? `index-${index}`}`;
+  }
+
+  async function getAzureSpeechToken() {
+    const cached = speechTokenRef.current;
+
+    if (cached && cached.expiresAt > Date.now() + 60_000) {
+      return cached;
+    }
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    if (sessionError || !sessionData.session) {
+      throw sessionError ?? new Error("Your session has expired.");
+    }
+
+    const response = await fetch("/api/speech/token", {
+      headers: {
+        Authorization: `Bearer ${sessionData.session.access_token}`
+      },
+      cache: "no-store"
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.token || !data.region) {
+      throw new Error(data.error || "Azure Speech is not configured.");
+    }
+
+    const token = {
+      token: data.token as string,
+      region: data.region as string,
+      expiresAt: Date.now() + Number(data.expiresInSeconds ?? 540) * 1000
+    };
+
+    speechTokenRef.current = token;
+    return token;
+  }
+
+  function stopReadAloud() {
+    speechGenerationRef.current += 1;
+    speechWordCursorRef.current = 0;
+
+    const synthesizer = speechSynthesizerRef.current;
+    speechSynthesizerRef.current = null;
+
+    if (synthesizer) {
+      synthesizer.close();
+    }
+
+    setReadAloudMessageKey(null);
+    setReadAloudStatus("idle");
+    setReadAloudWordIndex(null);
+  }
+
+  async function startReadAloud(message: ChatMessage, index: number) {
+    const text = toSpeechText(message.content);
+
+    if (!text) return;
+
+    stopReadAloud();
+
+    const generation = speechGenerationRef.current + 1;
+    speechGenerationRef.current = generation;
+
+    const messageKey = messageReadAloudKey(message, index);
+
+    setReadAloudMessageKey(messageKey);
+    setReadAloudStatus("loading");
+    setReadAloudWordIndex(null);
+    speechWordCursorRef.current = 0;
+
+    try {
+      const { token, region } = await getAzureSpeechToken();
+
+      if (generation !== speechGenerationRef.current) return;
+
+      const isHindi = /[\\u0900-\\u097F]/.test(text);
+      const voice = isHindi ? "hi-IN-KavyaNeural" : "en-US-JennyNeural";
+      const language = isHindi ? "hi-IN" : "en-US";
+
+      const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(
+        token,
+        region
+      );
+
+      speechConfig.speechSynthesisLanguage = language;
+      speechConfig.speechSynthesisVoiceName = voice;
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.SpeechServiceResponse_RequestWordBoundary,
+        "true"
+      );
+
+      const synthesizer = new SpeechSDK.SpeechSynthesizer(
+        speechConfig,
+        SpeechSDK.AudioConfig.fromDefaultSpeakerOutput()
+      );
+
+      speechSynthesizerRef.current = synthesizer;
+
+      synthesizer.synthesisStarted = () => {
+        if (generation === speechGenerationRef.current) {
+          setReadAloudStatus("speaking");
+        }
+      };
+
+      synthesizer.wordBoundary = (_sender, event) => {
+        if (generation !== speechGenerationRef.current) return;
+        if (event.boundaryType !== SpeechSDK.SpeechSynthesisBoundaryType.Word) return;
+
+        const root = document.querySelector<HTMLElement>(
+          `[data-read-aloud-message="${CSS.escape(messageKey)}"]`
+        );
+
+        if (!root) return;
+
+        const wordElements = Array.from(
+          root.querySelectorAll<HTMLElement>("[data-read-aloud-word]")
+        );
+
+        const boundaryWord = normalizeSpeechWord(String(event.text ?? ""));
+
+        if (!boundaryWord) return;
+
+        let matchIndex = -1;
+
+        for (
+          let cursor = speechWordCursorRef.current;
+          cursor < wordElements.length;
+          cursor += 1
+        ) {
+          const visibleWord = normalizeSpeechWord(
+            wordElements[cursor].textContent ?? ""
+          );
+
+          if (visibleWord === boundaryWord) {
+            matchIndex = cursor;
+            break;
+          }
+        }
+
+        if (matchIndex < 0) return;
+
+        speechWordCursorRef.current = matchIndex + 1;
+        setReadAloudWordIndex(matchIndex);
+      };
+
+      const finish = () => {
+        if (generation !== speechGenerationRef.current) return;
+
+        synthesizer.close();
+
+        if (speechSynthesizerRef.current === synthesizer) {
+          speechSynthesizerRef.current = null;
+        }
+
+        setReadAloudMessageKey(null);
+        setReadAloudStatus("idle");
+        setReadAloudWordIndex(null);
+        speechWordCursorRef.current = 0;
+      };
+
+      synthesizer.synthesisCompleted = finish;
+
+      synthesizer.synthesisCanceled = (_sender, event) => {
+        if (generation !== speechGenerationRef.current) return;
+        console.error("Azure Speech synthesis canceled:", event);
+        finish();
+      };
+
+      synthesizer.speakTextAsync(
+        text,
+        (result) => {
+          if (generation !== speechGenerationRef.current) return;
+
+          if (result.reason !== SpeechSDK.ResultReason.SynthesizingAudioCompleted) {
+            console.error(
+              "Azure Speech synthesis failed:",
+              result.errorDetails
+            );
+            finish();
+          }
+        },
+        (error) => {
+          if (generation !== speechGenerationRef.current) return;
+          console.error("Azure Speech error:", error);
+          finish();
+        }
+      );
+    } catch (error) {
+      if (generation !== speechGenerationRef.current) return;
+
+      console.error("Read Aloud error:", error);
+      setReadAloudMessageKey(null);
+      setReadAloudStatus("idle");
+      setReadAloudWordIndex(null);
+      speechWordCursorRef.current = 0;
+    }
+  }
+
   async function copyMessage(message: ChatMessage) {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -1262,6 +1488,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     if (!assistant || assistant.role !== "assistant" || previousUserIndex < 0) return;
 
+    stopReadAloud();
     setIsLoading(true);
 
     try {
@@ -1370,6 +1597,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     const content = input.trim();
     if (!content || isLoading || !activeSession) return;
 
+    stopReadAloud();
     setInput("");
     setIsLoading(true);
 
@@ -1799,7 +2027,21 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 {message.role === "assistant" ? (
                   <div className="assistant-content">
                     <div className="message-label">Aperonix</div>
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                    <div
+                      data-read-aloud-message={messageReadAloudKey(message, index)}
+                      className="assistant-markdown"
+                    >
+                      <ReactMarkdown
+                        components={createReadableMarkdownComponents(
+                          messageReadAloudKey(message, index),
+                          readAloudMessageKey === messageReadAloudKey(message, index)
+                            ? readAloudWordIndex
+                            : null
+                        )}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
 
                     <div className="message-actions" aria-label="Response actions">
                       <button
@@ -1813,6 +2055,45 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                           <rect x="8" y="8" width="11" height="11" rx="2" />
                           <path d="M16 8V6.8A2.8 2.8 0 0 0 13.2 4H6.8A2.8 2.8 0 0 0 4 6.8v6.4A2.8 2.8 0 0 0 6.8 16H8" />
                         </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`message-action-button read-aloud-button ${readAloudMessageKey === messageReadAloudKey(message, index) ? "is-reading" : ""}`}
+                        onClick={() => {
+                          const key = messageReadAloudKey(message, index);
+
+                          if (readAloudMessageKey === key && readAloudStatus !== "idle") {
+                            stopReadAloud();
+                          } else {
+                            void startReadAloud(message, index);
+                          }
+                        }}
+                        aria-label={
+                          readAloudMessageKey === messageReadAloudKey(message, index) &&
+                          readAloudStatus !== "idle"
+                            ? "Stop reading"
+                            : "Read response aloud"
+                        }
+                        title={
+                          readAloudMessageKey === messageReadAloudKey(message, index) &&
+                          readAloudStatus !== "idle"
+                            ? "Stop"
+                            : "Read aloud"
+                        }
+                      >
+                        {readAloudMessageKey === messageReadAloudKey(message, index) &&
+                        readAloudStatus !== "idle" ? (
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="7.5" y="7.5" width="9" height="9" rx="1.4" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M5.5 9.5v5l3.1 2.4h2.1V7.1H8.6L5.5 9.5Z" />
+                            <path d="M14.1 9.2a4.3 4.3 0 0 1 0 5.6" />
+                            <path d="M16.7 6.8a7.8 7.8 0 0 1 0 10.4" />
+                          </svg>
+                        )}
                       </button>
 
                       <button
