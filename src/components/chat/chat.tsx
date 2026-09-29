@@ -264,6 +264,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, FeedbackType>>({});
   const [shareModal, setShareModal] = useState<{ url: string; content: string; copied: boolean } | null>(null);
   const [shareCreatingMessageKey, setShareCreatingMessageKey] = useState<string | null>(null);
+  const [nativeShareSupported, setNativeShareSupported] = useState(false);
   const [isPinnedSectionOpen, setIsPinnedSectionOpen] = useState(true);
   const [isRecentSectionOpen, setIsRecentSectionOpen] = useState(true);
   const [deleteSession, setDeleteSession] = useState<ChatSession | null>(null);
@@ -319,6 +320,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   useEffect(() => {
     stopReadAloud();
   }, [pathname]);
+
+  useEffect(() => {
+    setNativeShareSupported(
+      typeof navigator !== "undefined" && typeof navigator.share === "function"
+    );
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -2887,6 +2894,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 type="button"
                 className="share-modal-button share-native-button"
                 onClick={() => void shareViaDevice()}
+                disabled={!nativeShareSupported}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="18" cy="5" r="2.3" />
@@ -2894,7 +2902,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   <circle cx="18" cy="19" r="2.3" />
                   <path d="m8.1 10.9 7.7-4.5M8.1 13.1l7.7 4.5" />
                 </svg>
-                <span>{typeof navigator !== "undefined" && typeof navigator.share === "function" ? "Share via device" : "Native sharing unavailable"}</span>
+                <span>{nativeShareSupported ? "Share via device" : "Native sharing unavailable"}</span>
               </button>
 
               <button
