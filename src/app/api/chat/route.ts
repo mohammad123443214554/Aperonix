@@ -63,9 +63,24 @@ export async function POST(request: Request) {
       );
     }
 
+    const { data: profileData, error: profileError } = await authClient
+      .from("profiles")
+      .select("aperonix_setting")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+
+    if (profileError && !/column .*aperonix_setting.*does not exist|schema cache/i.test(profileError.message)) {
+      console.error("Aperonix setting load error:", profileError);
+    }
+
+    const aperonixSetting =
+      typeof profileData?.aperonix_setting === "string"
+        ? profileData.aperonix_setting.slice(0, 4000)
+        : "";
+
     const completion = await getGroqClient().chat.completions.create({
       model: GROQ_MODEL,
-      messages: buildGroqMessages(sanitizedMessages),
+      messages: buildGroqMessages(sanitizedMessages, aperonixSetting),
       temperature: 0.7,
       max_completion_tokens: 2048,
       stream: false
