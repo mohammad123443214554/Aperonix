@@ -4378,3 +4378,90 @@ body {
     display: none;
   }
 }
+
+
+/* Aperonix personalization settings */
+.settings-card {
+  width: min(820px, 100%);
+}
+
+.aperonix-setting-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.aperonix-setting-field > span {
+  color: #eaf3ff;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.aperonix-setting-field textarea {
+  width: 100%;
+  min-height: 190px;
+  resize: vertical;
+  padding: 14px 15px;
+  border: 1px solid rgba(92, 143, 208, .24);
+  border-radius: 14px;
+  outline: none;
+  background: #050f20;
+  color: #e8f2ff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.65;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.03),
+    0 0 14px rgba(77,246,255,.025);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.aperonix-setting-field textarea::placeholder {
+  color: #607895;
+}
+
+.aperonix-setting-field textarea:focus {
+  border-color: rgba(77,246,255,.48);
+  box-shadow:
+    0 0 14px rgba(77,246,255,.07),
+    0 0 18px rgba(255,59,189,.035),
+    inset 0 1px rgba(255,255,255,.035);
+}
+
+.aperonix-setting-field textarea:disabled {
+  opacity: .62;
+  cursor: not-allowed;
+}
+
+.aperonix-setting-field small {
+  align-self: flex-end;
+  color: #607895;
+  font-size: 10px;
+}
+
+.settings-protected-note {
+  margin-top: 16px;
+  padding: 13px 14px;
+  border: 1px solid rgba(255, 95, 174, .16);
+  border-radius: 13px;
+  background: rgba(53, 11, 40, .18);
+}
+
+.settings-protected-note strong {
+  color: #ffb6d9;
+  font-size: 11px;
+}
+
+.settings-protected-note p {
+  margin: 7px 0 0;
+  color: #91a6c0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .aperonix-setting-field textarea {
+    min-height: 160px;
+  }
+}
