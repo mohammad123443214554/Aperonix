@@ -110,6 +110,13 @@ export default function AuthExperience() {
 
   useEffect(() => {
     setScreen(screenForPath(pathname));
+
+    if (pathname === "/confirm-email" && typeof window !== "undefined") {
+      const pendingEmail = window.sessionStorage.getItem("aperonix-confirm-email");
+      if (pendingEmail) {
+        setEmail(pendingEmail);
+      }
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -154,7 +161,7 @@ export default function AuthExperience() {
       mounted = false;
       data.subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [router]);
 
   async function continueWithGoogle() {
     setError("");
@@ -240,6 +247,9 @@ export default function AuthExperience() {
     }
 
     setShowConfirmationModal(true);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("aperonix-confirm-email", email.trim());
+    }
     router.replace("/confirm-email");
   }
 
