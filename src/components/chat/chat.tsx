@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
@@ -11,6 +11,77 @@ const welcomeMessage: ChatMessage = {
   role: "assistant",
   content: "Hi! I’m Aperonix AI. How can I help you today?"
 };
+
+
+const PROFILE_FILTERS = [
+  { name: "Original", css: "none" },
+  { name: "Bright", css: "brightness(1.14) saturate(1.05)" },
+  { name: "Contrast", css: "contrast(1.2)" },
+  { name: "Soft", css: "brightness(1.04) contrast(.95) saturate(.92)" },
+  { name: "Fade", css: "contrast(.9) brightness(1.08) saturate(.8)" },
+  { name: "Warm", css: "sepia(.12) saturate(1.2) hue-rotate(-8deg) brightness(1.04)" },
+  { name: "Cool", css: "saturate(.95) hue-rotate(10deg) brightness(1.03)" },
+  { name: "Golden", css: "sepia(.24) saturate(1.36) brightness(1.04)" },
+  { name: "Sunset", css: "sepia(.14) saturate(1.5) hue-rotate(-18deg) contrast(1.05)" },
+  { name: "Rose", css: "sepia(.08) saturate(1.5) hue-rotate(-28deg) brightness(1.02)" },
+  { name: "Violet", css: "saturate(1.15) hue-rotate(22deg) contrast(1.05)" },
+  { name: "Ocean", css: "saturate(1.12) hue-rotate(42deg) contrast(1.04)" },
+  { name: "Mint", css: "saturate(1.08) hue-rotate(78deg) brightness(1.05)" },
+  { name: "Forest", css: "saturate(1.12) hue-rotate(105deg) contrast(1.08)" },
+  { name: "Aqua", css: "saturate(1.2) hue-rotate(62deg) brightness(1.02)" },
+  { name: "Teal", css: "saturate(1.18) hue-rotate(52deg) contrast(1.06)" },
+  { name: "Lavender", css: "sepia(.05) saturate(1.05) hue-rotate(18deg) brightness(1.07)" },
+  { name: "Peach", css: "sepia(.12) saturate(1.3) hue-rotate(-12deg) brightness(1.05)" },
+  { name: "Honey", css: "sepia(.2) saturate(1.45) hue-rotate(-4deg) brightness(1.03)" },
+  { name: "Emerald", css: "saturate(1.25) hue-rotate(95deg) contrast(1.04)" },
+  { name: "Crimson", css: "saturate(1.3) hue-rotate(-35deg) contrast(1.08)" },
+  { name: "Cobalt", css: "saturate(1.18) hue-rotate(28deg) contrast(1.12)" },
+  { name: "Midnight", css: "brightness(.82) contrast(1.18) saturate(.92)" },
+  { name: "Deep Blue", css: "brightness(.86) saturate(1.2) hue-rotate(26deg) contrast(1.12)" },
+  { name: "Neon", css: "saturate(1.7) contrast(1.18) brightness(1.03)" },
+  { name: "Cyber", css: "saturate(1.4) contrast(1.2) hue-rotate(16deg)" },
+  { name: "Candy", css: "saturate(1.45) brightness(1.1) hue-rotate(-10deg)" },
+  { name: "Pop", css: "saturate(1.55) contrast(1.15)" },
+  { name: "Punch", css: "saturate(1.25) contrast(1.25)" },
+  { name: "Matte", css: "contrast(.9) saturate(.85) brightness(1.06)" },
+  { name: "Clean", css: "brightness(1.05) contrast(1.03) saturate(1.02)" },
+  { name: "Crisp", css: "contrast(1.16) saturate(1.12) brightness(1.01)" },
+  { name: "Dream", css: "brightness(1.1) saturate(.9) contrast(.92) blur(.1px)" },
+  { name: "Haze", css: "brightness(1.12) contrast(.86) saturate(.84)" },
+  { name: "Mist", css: "brightness(1.08) contrast(.88) saturate(.8)" },
+  { name: "Glow", css: "brightness(1.13) saturate(1.18) contrast(.98)" },
+  { name: "Dramatic", css: "contrast(1.34) saturate(1.12) brightness(.96)" },
+  { name: "Film", css: "contrast(1.08) saturate(.92) sepia(.08) brightness(1.01)" },
+  { name: "Vintage", css: "sepia(.3) contrast(.92) saturate(.8) brightness(1.04)" },
+  { name: "Sepia", css: "sepia(.72) contrast(.96) saturate(.72)" },
+  { name: "Copper", css: "sepia(.34) saturate(1.2) hue-rotate(-16deg) contrast(1.04)" },
+  { name: "Chrome", css: "grayscale(.16) contrast(1.22) brightness(1.04) saturate(.7)" },
+  { name: "Silver", css: "grayscale(.55) contrast(1.08) brightness(1.05)" },
+  { name: "Noir", css: "grayscale(1) contrast(1.28) brightness(.9)" },
+  { name: "Mono", css: "grayscale(1) contrast(1.05)" },
+  { name: "B&W Soft", css: "grayscale(1) contrast(.9) brightness(1.08)" },
+  { name: "B&W Hard", css: "grayscale(1) contrast(1.4)" },
+  { name: "Slate", css: "grayscale(.55) hue-rotate(165deg) saturate(.72) contrast(1.06)" },
+  { name: "Frost", css: "saturate(.75) brightness(1.12) hue-rotate(180deg) contrast(.94)" },
+  { name: "Ice", css: "saturate(.8) brightness(1.08) hue-rotate(155deg) contrast(1.02)" },
+  { name: "Arctic", css: "saturate(.72) brightness(1.06) hue-rotate(135deg) contrast(1.08)" },
+  { name: "Berry", css: "saturate(1.32) hue-rotate(-24deg) brightness(1.03)" },
+  { name: "Plum", css: "saturate(1.16) hue-rotate(8deg) brightness(.98) contrast(1.08)" },
+  { name: "Indigo", css: "saturate(1.18) hue-rotate(32deg) contrast(1.08)" },
+  { name: "Sapphire", css: "saturate(1.1) hue-rotate(38deg) brightness(.98) contrast(1.14)" },
+  { name: "Ruby", css: "saturate(1.4) hue-rotate(-42deg) contrast(1.1)" },
+  { name: "Amber", css: "sepia(.18) saturate(1.55) hue-rotate(-6deg) contrast(1.03)" },
+  { name: "Coral", css: "sepia(.08) saturate(1.45) hue-rotate(-16deg) brightness(1.05)" },
+  { name: "Olive", css: "sepia(.2) saturate(1.05) hue-rotate(42deg) contrast(1.03)" },
+  { name: "Moss", css: "sepia(.1) saturate(1.2) hue-rotate(70deg) brightness(1.02)" },
+  { name: "Twilight", css: "brightness(.92) saturate(1.18) hue-rotate(18deg) contrast(1.08)" },
+  { name: "Night", css: "brightness(.72) contrast(1.2) saturate(.95) hue-rotate(10deg)" },
+  { name: "Lunar", css: "grayscale(.2) brightness(.98) contrast(1.12) hue-rotate(165deg)" },
+  { name: "Soft Glow", css: "brightness(1.12) contrast(.94) saturate(1.06)" },
+  { name: "Studio", css: "brightness(1.06) contrast(1.08) saturate(.96)" },
+  { name: "Portrait", css: "brightness(1.04) contrast(.96) saturate(.94) sepia(.04)" },
+  { name: "Natural", css: "brightness(1.03) contrast(1.01) saturate(1.04)" }
+];
 
 function createLocalSession(): ChatSession {
   const now = Date.now();
@@ -83,9 +154,22 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     gender: "",
     phoneCountryCode: "+91",
     phoneNumber: "",
-    accountCreatedAt: ""
+    accountCreatedAt: "",
+    avatarUrl: "",
+    avatarPath: ""
   });
   const [profileDraft, setProfileDraft] = useState(profile);
+  const [photoEditorOpen, setPhotoEditorOpen] = useState(false);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
+  const [photoFilterIndex, setPhotoFilterIndex] = useState(0);
+  const [photoZoom, setPhotoZoom] = useState(1);
+  const [photoRotation, setPhotoRotation] = useState(0);
+  const [photoOffsetX, setPhotoOffsetX] = useState(0);
+  const [photoOffsetY, setPhotoOffsetY] = useState(0);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const photoFileRef = useRef<File | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [accountDeleteOpen, setAccountDeleteOpen] = useState(false);
   const [accountDeleteText, setAccountDeleteText] = useState("");
   const [accountDeleteError, setAccountDeleteError] = useState("");
@@ -107,7 +191,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         const { data: profileRow } = await supabase
           .from("profiles")
-          .select("first_name,last_name,email,date_of_birth,gender,phone_country_code,phone_number")
+          .select("first_name,last_name,email,date_of_birth,gender,phone_country_code,phone_number,avatar_url,avatar_path")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -120,7 +204,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             gender: profileRow?.gender ?? "",
             phoneCountryCode: profileRow?.phone_country_code ?? "+91",
             phoneNumber: profileRow?.phone_number ?? "",
-            accountCreatedAt: user.created_at ?? ""
+            accountCreatedAt: user.created_at ?? "",
+            avatarUrl: profileRow?.avatar_url ?? "",
+            avatarPath: profileRow?.avatar_path ?? ""
           });
         }
 
@@ -581,6 +667,175 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileEditOpen(true);
     setProfileOpen(false);
     setProfileDetailsOpen(false);
+  }
+
+
+  function getProfileDisplayName() {
+    return [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() || "Your profile";
+  }
+
+  function getProfileInitial() {
+    return getProfileDisplayName().charAt(0).toUpperCase() || "A";
+  }
+
+  function renderProfileAvatar(className = "profile-avatar") {
+    return profile.avatarUrl ? (
+      <img
+        src={profile.avatarUrl}
+        alt={getProfileDisplayName()}
+        className={className}
+      />
+    ) : (
+      <span className={className}>{getProfileInitial()}</span>
+    );
+  }
+
+  function openPhotoPicker() {
+    photoInputRef.current?.click();
+  }
+
+  function handlePhotoSelection(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Please choose an image file.");
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      setPhotoError("Please choose an image smaller than 8 MB.");
+      return;
+    }
+
+    if (photoPreviewUrl) {
+      URL.revokeObjectURL(photoPreviewUrl);
+    }
+
+    photoFileRef.current = file;
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+    setPhotoFilterIndex(0);
+    setPhotoZoom(1);
+    setPhotoRotation(0);
+    setPhotoOffsetX(0);
+    setPhotoOffsetY(0);
+    setPhotoError("");
+    setPhotoEditorOpen(true);
+  }
+
+  function closePhotoEditor() {
+    if (photoPreviewUrl) {
+      URL.revokeObjectURL(photoPreviewUrl);
+    }
+
+    photoFileRef.current = null;
+    setPhotoPreviewUrl("");
+    setPhotoEditorOpen(false);
+    setPhotoError("");
+    setPhotoSaving(false);
+  }
+
+  async function saveProfilePhoto() {
+    const file = photoFileRef.current;
+    if (!file || !photoPreviewUrl || photoSaving) return;
+
+    setPhotoSaving(true);
+    setPhotoError("");
+
+    try {
+      const user = await ensureAuthenticatedUser();
+
+      const image = new Image();
+      image.src = photoPreviewUrl;
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("Could not read this image."));
+      });
+
+      const size = 512;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Could not prepare the photo editor.");
+
+      context.clearRect(0, 0, size, size);
+      context.save();
+      context.translate(size / 2, size / 2);
+      context.rotate((photoRotation * Math.PI) / 180);
+
+      const baseScale = Math.max(size / image.width, size / image.height);
+      const scale = baseScale * photoZoom;
+      const drawWidth = image.width * scale;
+      const drawHeight = image.height * scale;
+      const drawX = -drawWidth / 2 + photoOffsetX;
+      const drawY = -drawHeight / 2 + photoOffsetY;
+
+      context.filter = PROFILE_FILTERS[photoFilterIndex].css;
+      context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+      context.restore();
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/webp", 0.9)
+      );
+
+      if (!blob) throw new Error("Could not create the edited photo.");
+
+      const safeName = file.name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+      const path = `${user.id}/avatar-${Date.now()}-${safeName || "photo"}.webp`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, blob, {
+          contentType: "image/webp",
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(path);
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          avatar_url: publicData.publicUrl,
+          avatar_path: path
+        })
+        .eq("id", user.id);
+
+      if (profileError) {
+        await supabase.storage.from("avatars").remove([path]);
+        throw profileError;
+      }
+
+      if (profile.avatarPath && profile.avatarPath !== path) {
+        await supabase.storage.from("avatars").remove([profile.avatarPath]);
+      }
+
+      setProfile((current) => ({
+        ...current,
+        avatarUrl: publicData.publicUrl,
+        avatarPath: path
+      }));
+      setProfileDraft((current) => ({
+        ...current,
+        avatarUrl: publicData.publicUrl,
+        avatarPath: path
+      }));
+
+      closePhotoEditor();
+    } catch (error) {
+      console.error("Profile photo save error:", error);
+      setPhotoError(
+        error instanceof Error ? error.message : "Could not save your profile photo."
+      );
+      setPhotoSaving(false);
+    }
   }
 
   function updateProfileDob(part: "day" | "month" | "year", value: string) {
@@ -1153,9 +1408,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           onClick={() => setProfileOpen((current) => !current)}
           aria-expanded={profileOpen}
         >
-          <span className="profile-avatar">
-            {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
-          </span>
+          {renderProfileAvatar("profile-avatar")}
           <span className="profile-summary">
             <strong>{[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your profile"}</strong>
             <small>{profile.email || "Account"}</small>
@@ -1166,15 +1419,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         {profileOpen && (
           <div className="profile-popover" role="dialog" aria-label="Profile actions">
             <div className="profile-popover-head">
-              <span className="profile-avatar large">
-                {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
-              </span>
+              {renderProfileAvatar("profile-avatar large")}
               <div>
                 <strong>{[profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your profile"}</strong>
                 <small>{profile.email}</small>
               </div>
             </div>
-            <button type="button" onClick={openProfileDetails}>Profile details</button>
+            <button type="button" onClick={openProfileDetails}>Account</button>
             <button type="button" onClick={openProfileEditor}>Edit profile</button>
             <button type="button" onClick={() => void onSignOut()} disabled={isLoading}>Sign out</button>
             <button
@@ -1378,7 +1629,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           <div className="account-page-content">
             <div className="account-hero-card">
               <div className="profile-details-avatar">
-                {(profile.firstName || profile.lastName || profile.email || "A").charAt(0).toUpperCase()}
+                {profile.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt={getProfileDisplayName()} />
+                ) : (
+                  getProfileInitial()
+                )}
               </div>
               <div>
                 <div className="account-eyebrow">APERONIX ACCOUNT</div>
@@ -1426,6 +1681,37 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   <span className="hero-kicker">Manage your details</span>
                   <h2>Edit profile</h2>
                   <p className="account-section-note">Your account email cannot be changed here.</p>
+                </div>
+              </div>
+
+              <div className="profile-photo-editor-entry">
+                <div className="profile-photo-preview-wrap">
+                  <div className="profile-details-avatar profile-edit-avatar">
+                    {profile.avatarUrl ? (
+                      <img src={profile.avatarUrl} alt={getProfileDisplayName()} />
+                    ) : (
+                      getProfileInitial()
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="profile-photo-pencil"
+                    onClick={openPhotoPicker}
+                    aria-label="Change profile photo"
+                    title="Change profile photo"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m4.5 16.7-.7 3.5 3.5-.7L18.7 8.1l-2.8-2.8L4.5 16.7Z" />
+                      <path d="m14.8 6.4 2.8 2.8M3.8 20.2l4.3-.9" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="profile-photo-entry-copy">
+                  <strong>Profile photo</strong>
+                  <span>Add a photo or keep your first-letter avatar.</span>
+                  <button type="button" className="profile-photo-change-button" onClick={openPhotoPicker}>
+                    {profile.avatarUrl ? "Change photo" : "Add photo"}
+                  </button>
                 </div>
               </div>
 
@@ -1524,6 +1810,97 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             </div>
           </div>
         </section>
+      )}
+
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="profile-photo-file-input"
+        onChange={handlePhotoSelection}
+      />
+
+      {photoEditorOpen && photoPreviewUrl && (
+        <div className="photo-editor-backdrop" role="presentation">
+          <section className="photo-editor-modal" role="dialog" aria-modal="true" aria-labelledby="photo-editor-title">
+            <div className="photo-editor-header">
+              <div>
+                <span className="hero-kicker">Personalize your profile</span>
+                <h2 id="photo-editor-title">Adjust profile photo</h2>
+                <p>Crop, rotate and choose a filter before saving.</p>
+              </div>
+              <button type="button" className="photo-editor-close" onClick={closePhotoEditor} disabled={photoSaving} aria-label="Close photo editor">×</button>
+            </div>
+
+            <div className="photo-editor-preview-area">
+              <div className="photo-editor-frame">
+                <img
+                  src={photoPreviewUrl}
+                  alt="Profile preview"
+                  className="photo-editor-preview"
+                  style={{
+                    filter: PROFILE_FILTERS[photoFilterIndex].css,
+                    transform: `translate(${photoOffsetX}px, ${photoOffsetY}px) rotate(${photoRotation}deg) scale(${photoZoom})`
+                  }}
+                />
+              </div>
+            </div>
+
+            {photoError && <div className="auth-error">{photoError}</div>}
+
+            <div className="photo-editor-controls">
+              <label>
+                Zoom
+                <input type="range" min="1" max="2.5" step="0.05" value={photoZoom} onChange={(event) => setPhotoZoom(Number(event.target.value))} />
+              </label>
+              <label>
+                Rotate
+                <input type="range" min="-180" max="180" step="1" value={photoRotation} onChange={(event) => setPhotoRotation(Number(event.target.value))} />
+              </label>
+              <label>
+                Horizontal
+                <input type="range" min="-120" max="120" step="2" value={photoOffsetX} onChange={(event) => setPhotoOffsetX(Number(event.target.value))} />
+              </label>
+              <label>
+                Vertical
+                <input type="range" min="-120" max="120" step="2" value={photoOffsetY} onChange={(event) => setPhotoOffsetY(Number(event.target.value))} />
+              </label>
+            </div>
+
+            <div className="photo-filter-section">
+              <div className="photo-filter-heading">
+                <strong>Filters</strong>
+                <span>{PROFILE_FILTERS.length}+ styles</span>
+              </div>
+              <div className="photo-filter-grid">
+                {PROFILE_FILTERS.map((filter, index) => (
+                  <button
+                    type="button"
+                    key={filter.name}
+                    className={`photo-filter-option ${photoFilterIndex === index ? "active" : ""}`}
+                    onClick={() => setPhotoFilterIndex(index)}
+                  >
+                    <span
+                      className="photo-filter-thumb"
+                      style={{
+                        backgroundImage: `url(${photoPreviewUrl})`,
+                        filter: filter.css
+                      }}
+                    />
+                    <span>{filter.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="photo-editor-actions">
+              <button type="button" className="modal-secondary" onClick={closePhotoEditor} disabled={photoSaving}>Cancel</button>
+              <button type="button" className="modal-primary" onClick={() => void saveProfilePhoto()} disabled={photoSaving}>
+                {photoSaving ? "Saving..." : "Save photo"}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       {accountDeleteOpen && (
