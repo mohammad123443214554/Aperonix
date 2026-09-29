@@ -147,6 +147,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [profileEditOpen, setProfileEditOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aperonixSetting, setAperonixSetting] = useState("");
+  const [settingsDraft, setSettingsDraft] = useState("");
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
   const [profile, setProfile] = useState({
     firstName: "",
     lastName: "",
@@ -193,7 +198,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         const { data: profileRow } = await supabase
           .from("profiles")
-          .select("first_name,last_name,email,date_of_birth,gender,phone_country_code,phone_number,avatar_url,avatar_path")
+          .select("first_name,last_name,email,date_of_birth,gender,phone_country_code,phone_number,avatar_url,avatar_path,aperonix_setting")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -210,6 +215,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             avatarUrl: profileRow?.avatar_url ?? "",
             avatarPath: profileRow?.avatar_path ?? ""
           });
+          setAperonixSetting(profileRow?.aperonix_setting ?? "");
+          setSettingsDraft(profileRow?.aperonix_setting ?? "");
         }
 
         const { data: chats, error: chatsError } = await supabase
@@ -677,6 +684,52 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileDetailsOpen(false);
   }
 
+
+  function openSettings() {
+    setSettingsDraft(aperonixSetting);
+    setSettingsError("");
+    setSettingsOpen(true);
+    setProfileOpen(false);
+    setProfileDetailsOpen(false);
+    setProfileEditOpen(false);
+  }
+
+  async function saveAperonixSetting() {
+    if (settingsSaving) return;
+
+    const cleaned = settingsDraft.trim();
+    if (cleaned.length > 4000) {
+      setSettingsError("Keep your Aperonix setting under 4000 characters.");
+      return;
+    }
+
+    setSettingsSaving(true);
+    setSettingsError("");
+
+    try {
+      const user = await ensureAuthenticatedUser();
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({ aperonix_setting: cleaned || null })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      setAperonixSetting(cleaned);
+      setSettingsDraft(cleaned);
+      setSettingsOpen(false);
+    } catch (error) {
+      console.error("Aperonix setting save error:", error);
+      setSettingsError(
+        error instanceof Error
+          ? error.message
+          : "Could not save your Aperonix setting."
+      );
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
 
   function getProfileDisplayName() {
     return [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() || "Your profile";
@@ -1486,6 +1539,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             </div>
             <button type="button" onClick={openProfileDetails}>Account</button>
             <button type="button" onClick={openProfileEditor}>Edit profile</button>
+            <button type="button" onClick={openSettings}>Settings</button>
             <button type="button" onClick={() => void onSignOut()} disabled={isLoading}>Sign out</button>
             <button
               type="button"
@@ -1718,6 +1772,84 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 <div><span>Gender</span><strong>{profile.gender || "—"}</strong></div>
                 <div><span>Phone</span><strong>{profile.phoneNumber ? `${profile.phoneCountryCode} ${profile.phoneNumber}` : "—"}</strong></div>
                 <div className="full"><span>Account created</span><strong>{profile.accountCreatedAt ? new Date(profile.accountCreatedAt).toLocaleString() : "—"}</strong></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {settingsOpen && (
+        <section className="account-page-overlay settings-page-overlay">
+          <div className="account-page-header">
+            <button
+              type="button"
+              className="account-page-back"
+              onClick={() => setSettingsOpen(false)}
+              disabled={settingsSaving}
+            >
+              <span>←</span> Back
+            </button>
+            <span className="account-page-title">Settings</span>
+          </div>
+
+          <div className="account-page-content">
+            <div className="account-section-card settings-card">
+              <div className="account-section-heading">
+                <div>
+                  <span className="hero-kicker">Personalize your AI</span>
+                  <h2>Aperonix setting</h2>
+                  <p className="account-section-note">
+                    Write in any language about how you want Aperonix to behave for you.
+                    This personal setting can shape its responses, while Aperonix's core identity and protected rules stay unchanged.
+                  </p>
+                </div>
+              </div>
+
+              <label className="aperonix-setting-field">
+                <span>What should Aperonix be for you?</span>
+                <textarea
+                  value={settingsDraft}
+                  onChange={(event) => setSettingsDraft(event.target.value)}
+                  maxLength={4000}
+                  placeholder="Example: Help me learn step by step, keep answers simple, and speak casually with me."
+                  rows={8}
+                  disabled={settingsSaving}
+                />
+                <small>{settingsDraft.length}/4000 characters</small>
+              </label>
+
+              <div className="settings-protected-note">
+                <strong>Protected by Aperonix</strong>
+                <p>
+                  You cannot change Aperonix's name, creator, ownership, or core identity.
+                  Personalization also cannot turn Aperonix into a real person, romantic partner,
+                  or falsely claim to be Mohammad Khan.
+                </p>
+              </div>
+
+              {settingsError && <div className="auth-error">{settingsError}</div>}
+
+              <div className="account-modal-actions">
+                <button
+                  type="button"
+                  className="modal-secondary"
+                  onClick={() => {
+                    setSettingsDraft(aperonixSetting);
+                    setSettingsError("");
+                    setSettingsOpen(false);
+                  }}
+                  disabled={settingsSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="modal-primary"
+                  onClick={() => void saveAperonixSetting()}
+                  disabled={settingsSaving}
+                >
+                  {settingsSaving ? "Saving..." : "Save setting"}
+                </button>
               </div>
             </div>
           </div>
