@@ -1939,7 +1939,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                     setAccountDeleteText("");
                     setAccountDeleteError("");
                     setAccountDeleteOpen(true);
-                    router.push("/account/delete");
                   }}
                 >
                   <span className="danger-zone-action-icon" aria-hidden="true">
