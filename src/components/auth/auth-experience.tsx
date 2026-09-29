@@ -24,7 +24,8 @@ function isProtectedPath(pathname: string) {
     pathname === "/profile/edit" ||
     pathname === "/account/delete" ||
     pathname === "/settings" ||
-    pathname === "/settings/aperonix"
+    pathname === "/settings/aperonix" ||
+    pathname === "/settings/danger-zone"
   );
 }
 
