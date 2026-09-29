@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { createPortal } from "react-dom";
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
@@ -1820,9 +1821,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         onChange={handlePhotoSelection}
       />
 
-      {photoEditorOpen && photoPreviewUrl && (
-        <div className="photo-editor-backdrop" role="presentation">
-          <section className="photo-editor-modal" role="dialog" aria-modal="true" aria-labelledby="photo-editor-title">
+      {photoEditorOpen && photoPreviewUrl && typeof document !== "undefined"
+        ? createPortal(
+            <div className="photo-editor-backdrop" role="presentation">
+              <section className="photo-editor-modal" role="dialog" aria-modal="true" aria-labelledby="photo-editor-title">
             <div className="photo-editor-header">
               <div>
                 <span className="hero-kicker">Personalize your profile</span>
@@ -1899,9 +1901,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 {photoSaving ? "Saving..." : "Save photo"}
               </button>
             </div>
-          </section>
-        </div>
-      )}
+              </section>
+            </div>,
+            document.body
+          )
+        : null}
 
       {accountDeleteOpen && (
         <div className="account-modal-backdrop account-delete-backdrop" role="presentation">
