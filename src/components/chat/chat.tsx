@@ -1,7 +1,21 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  Children,
+  cloneElement,
+  FormEvent,
+  isValidElement,
+  ReactElement,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
+import * as SpeechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -120,6 +134,114 @@ function profileYears() {
   return Array.from({ length: current - 1899 }, (_, index) => current - index);
 }
 
+function normalizeSpeechWord(value: string) {
+  return value
+    .toLocaleLowerCase()
+    .replace(/[^\\p{L}\\p{N}'’-]/gu, "");
+}
+
+function toSpeechText(markdown: string) {
+  return markdown
+    .replace(/!\\[([^\\]]*)\\]\\([^)]*\\)/g, "$1")
+    .replace(/\\[([^\\]]+)\\]\\([^)]*\\)/g, "$1")
+    .replace(/\\x60\\x60\\x60(?:[^\\n]*)\\n?([\\s\\S]*?)\\x60\\x60\\x60/g, "$1")
+    .replace(/^\\s{0,3}#{1,6}\\s+/gm, "")
+    .replace(/^\\s*[-*+]\\s+/gm, "")
+    .replace(/^\\s*\\d+\\.\\s+/gm, "")
+    .replace(/[>*_~|]/g, "")
+    .replace(/\\x60/g, "")
+    .replace(/\\n{3,}/g, "\\n\\n")
+    .trim();
+}
+
+function createReadableMarkdownComponents(
+  messageKey: string,
+  highlightedWordIndex: number | null
+): Components {
+  let wordIndex = 0;
+
+  const wrapChildren = (children: ReactNode): ReactNode =>
+    Children.map(children, (child) => {
+      if (typeof child === "string") {
+        return child.split(/(\\s+)/).map((piece, pieceIndex) => {
+          if (!piece || /^\\s+$/.test(piece)) return piece;
+
+          const currentIndex = wordIndex++;
+          const isHighlighted = currentIndex === highlightedWordIndex;
+
+          return (
+            <span
+              key={`read-word-${currentIndex}-${pieceIndex}`}
+              className={`read-aloud-word ${isHighlighted ? "is-reading" : ""}`}
+              data-read-aloud-word={currentIndex}
+            >
+              {piece}
+            </span>
+          );
+        });
+      }
+
+      if (isValidElement(child)) {
+        const element = child as ReactElement<{ children?: ReactNode }>;
+        return cloneElement(element, {
+          children: wrapChildren(element.props.children)
+        });
+      }
+
+      return child;
+    });
+
+  const block = (Tag: "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6") =>
+    (props: any) => {
+      const { children, ...rest } = props;
+      return <Tag {...rest}>{wrapChildren(children)}</Tag>;
+    };
+
+  const components: Components = {
+    p: block("p"),
+    h1: block("h1"),
+    h2: block("h2"),
+    h3: block("h3"),
+    h4: block("h4"),
+    h5: block("h5"),
+    h6: block("h6"),
+    ul: (props) => {
+      const { children, ...rest } = props;
+      return <ul {...rest}>{wrapChildren(children)}</ul>;
+    },
+    ol: (props) => {
+      const { children, ...rest } = props;
+      return <ol {...rest}>{wrapChildren(children)}</ol>;
+    },
+    blockquote: (props) => {
+      const { children, ...rest } = props;
+      return <blockquote {...rest}>{wrapChildren(children)}</blockquote>;
+    },
+    pre: (props) => {
+      const { children, ...rest } = props;
+      return <pre {...rest}>{wrapChildren(children)}</pre>;
+    },
+    table: (props) => {
+      const { children, ...rest } = props;
+      return <table {...rest}>{wrapChildren(children)}</table>;
+    },
+    thead: (props) => {
+      const { children, ...rest } = props;
+      return <thead {...rest}>{wrapChildren(children)}</thead>;
+    },
+    tbody: (props) => {
+      const { children, ...rest } = props;
+      return <tbody {...rest}>{wrapChildren(children)}</tbody>;
+    },
+    tfoot: (props) => {
+      const { children, ...rest } = props;
+      return <tfoot {...rest}>{wrapChildren(children)}</tfoot>;
+    }
+  };
+
+  return components;
+}
+
 async function ensureAuthenticatedUser() {
   const { data, error } = await supabase.auth.getUser();
 
@@ -188,6 +310,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [accountDeleteError, setAccountDeleteError] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [readAloudMessageKey, setReadAloudMessageKey] = useState<string | null>(null);
+  const [readAloudStatus, setReadAloudStatus] = useState<"idle" | "loading" | "speaking">("idle");
+  const [readAloudWordIndex, setReadAloudWordIndex] = useState<number | null>(null);
+  const speechSynthesizerRef = useRef<SpeechSDK.SpeechSynthesizer | null>(null);
+  const speechTokenRef = useRef<{ token: string; region: string; expiresAt: number } | null>(null);
+  const speechGenerationRef = useRef(0);
+  const speechWordCursorRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
