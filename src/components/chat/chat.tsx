@@ -298,8 +298,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [readAloudMessageKey, setReadAloudMessageKey] = useState<string | null>(null);
   const [readAloudStatus, setReadAloudStatus] = useState<"idle" | "loading" | "speaking">("idle");
   const [readAloudWordIndex, setReadAloudWordIndex] = useState<number | null>(null);
-  const readAloudAudioRef = useRef<HTMLAudioElement | null>(null);
-  const readAloudObjectUrlRef = useRef<string | null>(null);
+  const readAloudUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const readAloudGenerationRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -1179,141 +1178,119 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     return `${activeSession?.id ?? "session"}:${message.id ?? `index-${index}`}`;
   }
 
-  function clearReadAloudObjectUrl() {
-    if (readAloudObjectUrlRef.current) {
-      URL.revokeObjectURL(readAloudObjectUrlRef.current);
-      readAloudObjectUrlRef.current = null;
+  function wordIndexAtCharacter(text: string, characterIndex: number) {
+    const safeIndex = Math.max(0, Math.min(characterIndex, text.length));
+    const before = text.slice(0, safeIndex);
+    const words = before.match(/\S+/g);
+    return Math.max(0, (words?.length ?? 1) - 1);
+  }
+
+  function pickSweetFemaleVoice(voices: SpeechSynthesisVoice[]) {
+    const preferredNames = [
+      "Microsoft Zira",
+      "Microsoft Jenny",
+      "Google UK English Female",
+      "Google US English Female",
+      "Samantha",
+      "Karen",
+      "Moira",
+      "Ava"
+    ];
+
+    for (const name of preferredNames) {
+      const match = voices.find((voice) =>
+        voice.name.toLocaleLowerCase().includes(name.toLocaleLowerCase())
+      );
+      if (match) return match;
     }
+
+    return voices.find((voice) =>
+      /female|woman|zira|jenny|samantha|karen|ava|moira/i.test(voice.name)
+    );
   }
 
   function stopReadAloud() {
     readAloudGenerationRef.current += 1;
 
-    const audio = readAloudAudioRef.current;
-    readAloudAudioRef.current = null;
-
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.src = "";
-    }
-
-    clearReadAloudObjectUrl();
+    window.speechSynthesis.cancel();
+    readAloudUtteranceRef.current = null;
     setReadAloudMessageKey(null);
     setReadAloudStatus("idle");
     setReadAloudWordIndex(null);
   }
 
-  async function startReadAloud(message: ChatMessage, index: number) {
+  function startReadAloud(message: ChatMessage, index: number) {
     const text = toSpeechText(message.content);
-    if (!text) return;
+    if (!text || typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
     stopReadAloud();
 
     const generation = readAloudGenerationRef.current + 1;
     readAloudGenerationRef.current = generation;
-
     const messageKey = messageReadAloudKey(message, index);
+
     setReadAloudMessageKey(messageKey);
     setReadAloudStatus("loading");
     setReadAloudWordIndex(null);
 
-    try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !sessionData.session) {
-        throw sessionError ?? new Error("Your session has expired.");
-      }
-
-      const languageCode = /[\u0900-\u097F]/.test(text) ? "hi-IN" : "en-IN";
-      const response = await fetch("/api/speech/synthesize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${sessionData.session.access_token}`
-        },
-        body: JSON.stringify({ text, languageCode }),
-        cache: "no-store"
-      });
-
-      const data = await response.json();
-      if (!response.ok || !Array.isArray(data.chunks)) {
-        throw new Error(data.error || "Could not start Read Aloud.");
-      }
-
+    const speak = () => {
       if (generation !== readAloudGenerationRef.current) return;
 
-      const chunks = data.chunks as Array<{
-        audioContent: string;
-        words: string[];
-        timepoints: Array<{ index: number; timeSeconds: number }>;
-      }>;
-      const chunkWordOffsets = Array.isArray(data.chunkWordOffsets)
-        ? (data.chunkWordOffsets as number[])
-        : [];
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const isHindi = /[\u0900-\u097F]/.test(text);
 
-      const playChunk = async (chunkIndex: number) => {
-        if (generation !== readAloudGenerationRef.current) return;
+      if (isHindi) {
+        const hindiVoice = voices.find((voice) =>
+          /^hi[-_]/i.test(voice.lang) || /Hindi/i.test(voice.name)
+        );
+        if (hindiVoice) utterance.voice = hindiVoice;
+      } else {
+        const femaleVoice = pickSweetFemaleVoice(voices);
+        if (femaleVoice) utterance.voice = femaleVoice;
+      }
 
-        const chunk = chunks[chunkIndex];
-        if (!chunk) {
-          stopReadAloud();
-          return;
+      utterance.lang = isHindi ? "hi-IN" : "en-IN";
+      utterance.rate = 0.94;
+      utterance.pitch = 1.05;
+      utterance.volume = 1;
+
+      utterance.onstart = () => {
+        if (generation === readAloudGenerationRef.current) {
+          setReadAloudStatus("speaking");
         }
-
-        clearReadAloudObjectUrl();
-
-        const binary = atob(chunk.audioContent);
-        const bytes = new Uint8Array(binary.length);
-        for (let cursor = 0; cursor < binary.length; cursor += 1) {
-          bytes[cursor] = binary.charCodeAt(cursor);
-        }
-
-        const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
-        readAloudObjectUrlRef.current = objectUrl;
-
-        const audio = new Audio(objectUrl);
-        audio.preload = "auto";
-        readAloudAudioRef.current = audio;
-        setReadAloudStatus("speaking");
-
-        audio.ontimeupdate = () => {
-          if (generation !== readAloudGenerationRef.current) return;
-
-          const points = chunk.timepoints ?? [];
-          let currentChunkWord = 0;
-
-          for (const point of points) {
-            if (audio.currentTime >= Number(point.timeSeconds)) {
-              currentChunkWord = Number(point.index);
-            } else {
-              break;
-            }
-          }
-
-          setReadAloudWordIndex(
-            (chunkWordOffsets[chunkIndex] ?? 0) + currentChunkWord
-          );
-        };
-
-        audio.onended = () => {
-          if (generation !== readAloudGenerationRef.current) return;
-          clearReadAloudObjectUrl();
-          void playChunk(chunkIndex + 1);
-        };
-
-        audio.onerror = () => {
-          if (generation !== readAloudGenerationRef.current) return;
-          stopReadAloud();
-        };
-
-        await audio.play();
       };
 
-      await playChunk(0);
-    } catch (error) {
-      if (generation !== readAloudGenerationRef.current) return;
-      console.error("Google Cloud Read Aloud error:", error);
-      stopReadAloud();
+      utterance.onboundary = (event) => {
+        if (generation !== readAloudGenerationRef.current) return;
+        if (event.name && event.name !== "word") return;
+        setReadAloudWordIndex(wordIndexAtCharacter(text, event.charIndex ?? 0));
+      };
+
+      utterance.onend = () => {
+        if (generation !== readAloudGenerationRef.current) return;
+        readAloudUtteranceRef.current = null;
+        setReadAloudMessageKey(null);
+        setReadAloudStatus("idle");
+        setReadAloudWordIndex(null);
+      };
+
+      utterance.onerror = () => {
+        if (generation !== readAloudGenerationRef.current) return;
+        readAloudUtteranceRef.current = null;
+        setReadAloudMessageKey(null);
+        setReadAloudStatus("idle");
+        setReadAloudWordIndex(null);
+      };
+
+      readAloudUtteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      speak();
+    } else {
+      window.speechSynthesis.addEventListener("voiceschanged", speak, { once: true });
     }
   }
   async function copyMessage(message: ChatMessage) {
@@ -1938,7 +1915,21 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 {message.role === "assistant" ? (
                   <div className="assistant-content">
                     <div className="message-label">Aperonix</div>
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                    <div
+                      data-read-aloud-message={messageReadAloudKey(message, index)}
+                      className="assistant-markdown"
+                    >
+                      <ReactMarkdown
+                        components={createReadableMarkdownComponents(
+                          messageReadAloudKey(message, index),
+                          readAloudMessageKey === messageReadAloudKey(message, index)
+                            ? readAloudWordIndex
+                            : null
+                        )}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
 
                     <div className="message-actions" aria-label="Response actions">
                       <button
