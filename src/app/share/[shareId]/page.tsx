@@ -15,9 +15,7 @@ async function getSharedResponse(shareId: string): Promise<SharedResponse | null
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
-    return null;
-  }
+  if (!supabaseUrl || !supabaseKey) return null;
 
   const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: {
@@ -33,10 +31,7 @@ async function getSharedResponse(shareId: string): Promise<SharedResponse | null
     .eq("id", shareId)
     .maybeSingle();
 
-  if (error || !data) {
-    return null;
-  }
-
+  if (error || !data) return null;
   return data as SharedResponse;
 }
 
@@ -63,11 +58,11 @@ export async function generateMetadata({
     .slice(0, 155);
 
   return {
-    title: "Aperonix AI response",
+    title: "Aperonix AI",
     description: description || "A response shared from Aperonix AI.",
     robots: { index: false, follow: false },
     openGraph: {
-      title: "Aperonix AI response",
+      title: "Aperonix AI",
       description: description || "A response shared from Aperonix AI.",
       type: "article"
     }
@@ -82,28 +77,24 @@ export default async function SharedResponsePage({
   const { shareId } = await params;
   const shared = await getSharedResponse(shareId);
 
-  if (!shared) {
-    notFound();
-  }
-
-  const sharedDate = new Date(shared.created_at);
+  if (!shared) notFound();
 
   return (
     <main className="shared-response-page">
+      <div className="shared-response-orb shared-response-orb-one" aria-hidden="true" />
+      <div className="shared-response-orb shared-response-orb-two" aria-hidden="true" />
+
       <div className="shared-response-shell">
-        <header className="shared-response-brand">
-          <img src="/aperonix-logo.png" alt="Aperonix AI" />
-          <div>
-            <strong>Aperonix AI</strong>
-            <span>Shared response</span>
-          </div>
+        <header className="shared-response-brand" aria-label="Aperonix AI">
+          <img src="/aperonix-logo.png" alt="" />
+          <span>Aperonix AI</span>
         </header>
 
-        <section className="shared-response-card">
+        <section className="shared-response-card" aria-labelledby="shared-response-title">
           <div className="shared-response-heading">
-            <span className="hero-kicker">Aperonix AI</span>
-            <h1>Shared response</h1>
-            <p>This response was shared from an Aperonix AI conversation.</p>
+            <span className="shared-response-kicker">APERONIX AI</span>
+            <h1 id="shared-response-title">Shared response</h1>
+            <p>A response shared from Aperonix AI.</p>
           </div>
 
           <article className="shared-response-content">
@@ -111,13 +102,6 @@ export default async function SharedResponsePage({
           </article>
 
           <div className="shared-response-footer">
-            <time dateTime={shared.created_at}>
-              Shared {sharedDate.toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "short",
-                year: "numeric"
-              })}
-            </time>
             <a className="shared-response-open" href="/">
               Open Aperonix AI
               <span aria-hidden="true">→</span>
@@ -126,7 +110,7 @@ export default async function SharedResponsePage({
         </section>
 
         <p className="shared-response-note">
-          This page contains only the selected response. Private chat history is not shared.
+          Only this response was shared. Private chat history is not included.
         </p>
       </div>
     </main>
