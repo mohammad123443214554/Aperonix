@@ -1,11 +1,42 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import Chat from "@/components/chat/chat";
 
 type Screen = "landing" | "choice" | "signup" | "signin" | "confirmation";
+
+function screenForPath(pathname: string): Screen {
+  if (pathname === "/signup") return "signup";
+  if (pathname === "/signin") return "signin";
+  if (pathname === "/confirm-email") return "confirmation";
+  if (pathname === "/get-started") return "choice";
+  return "landing";
+}
+
+function isProtectedPath(pathname: string) {
+  return (
+    pathname === "/chat" ||
+    /^\/chat\/[^/]+$/.test(pathname) ||
+    pathname === "/profile" ||
+    pathname === "/profile/edit" ||
+    pathname === "/account/delete" ||
+    pathname === "/settings" ||
+    pathname === "/settings/aperonix"
+  );
+}
+
+function isAuthPath(pathname: string) {
+  return (
+    pathname === "/" ||
+    pathname === "/signin" ||
+    pathname === "/signup" ||
+    pathname === "/get-started" ||
+    pathname === "/confirm-email"
+  );
+}
 
 const iconItems = [
   { label: "Coding", symbol: "</>" },
@@ -52,7 +83,9 @@ async function syncProfile(user: { id: string; email?: string | null; user_metad
 }
 
 export default function AuthExperience() {
-  const [screen, setScreen] = useState<Screen>("landing");
+  const pathname = usePathname();
+  const router = useRouter();
+  const [screen, setScreen] = useState<Screen>(() => screenForPath(pathname));
   const [sessionLoading, setSessionLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
 
@@ -76,6 +109,23 @@ export default function AuthExperience() {
   const years = useMemo(getYears, []);
 
   useEffect(() => {
+    setScreen(screenForPath(pathname));
+  }, [pathname]);
+
+  useEffect(() => {
+    if (sessionLoading) return;
+
+    if (authenticated && isAuthPath(pathname)) {
+      router.replace("/chat");
+      return;
+    }
+
+    if (!authenticated && isProtectedPath(pathname)) {
+      router.replace("/signin");
+    }
+  }, [authenticated, pathname, router, sessionLoading]);
+
+  useEffect(() => {
     let mounted = true;
 
     supabase.auth.getSession().then(async ({ data }) => {
@@ -96,7 +146,7 @@ export default function AuthExperience() {
       setAuthenticated(isRealAccount);
 
       if (event === "SIGNED_IN" && isRealAccount) {
-        setScreen("landing");
+        router.replace("/chat");
       }
     });
 
@@ -104,7 +154,7 @@ export default function AuthExperience() {
       mounted = false;
       data.subscription.unsubscribe();
     };
-  }, []);
+  }, [pathname, router]);
 
   async function continueWithGoogle() {
     setError("");
@@ -163,7 +213,7 @@ export default function AuthExperience() {
       email: email.trim(),
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: `${window.location.origin}/confirm-email`,
         data: {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
@@ -185,10 +235,12 @@ export default function AuthExperience() {
     if (data.session && data.user) {
       await syncProfile(data.user);
       setAuthenticated(true);
+      router.replace("/chat");
       return;
     }
 
     setShowConfirmationModal(true);
+    router.replace("/confirm-email");
   }
 
   async function handleSignin(event: FormEvent<HTMLFormElement>) {
@@ -211,18 +263,29 @@ export default function AuthExperience() {
     if (data.user) {
       await syncProfile(data.user);
       setAuthenticated(true);
+      router.replace("/chat");
     }
   }
 
   function resetErrorAnd(screenName: Screen) {
     setError("");
     setScreen(screenName);
+
+    const nextPath =
+      screenName === "landing" ? "/" :
+      screenName === "choice" ? "/get-started" :
+      screenName === "signup" ? "/signup" :
+      screenName === "signin" ? "/signin" :
+      "/confirm-email";
+
+    router.push(nextPath);
   }
 
   async function signOut() {
     await supabase.auth.signOut();
     setAuthenticated(false);
     setScreen("landing");
+    router.replace("/");
   }
 
   if (sessionLoading) {
