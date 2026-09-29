@@ -168,6 +168,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [photoOffsetX, setPhotoOffsetX] = useState(0);
   const [photoOffsetY, setPhotoOffsetY] = useState(0);
   const [photoSaving, setPhotoSaving] = useState(false);
+  const [photoRemoving, setPhotoRemoving] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const photoFileRef = useRef<File | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -744,6 +745,55 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setPhotoEditorOpen(false);
     setPhotoError("");
     setPhotoSaving(false);
+  }
+
+  async function removeProfilePhoto() {
+    if (photoRemoving || photoSaving || !profile.avatarUrl) return;
+
+    setPhotoRemoving(true);
+    setPhotoError("");
+
+    try {
+      const user = await ensureAuthenticatedUser();
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          avatar_url: null,
+          avatar_path: null
+        })
+        .eq("id", user.id);
+
+      if (profileError) throw profileError;
+
+      if (profile.avatarPath) {
+        const { error: storageError } = await supabase.storage
+          .from("avatars")
+          .remove([profile.avatarPath]);
+
+        if (storageError) {
+          console.error("Profile photo storage cleanup error:", storageError);
+        }
+      }
+
+      setProfile((current) => ({
+        ...current,
+        avatarUrl: "",
+        avatarPath: ""
+      }));
+      setProfileDraft((current) => ({
+        ...current,
+        avatarUrl: "",
+        avatarPath: ""
+      }));
+    } catch (error) {
+      console.error("Profile photo remove error:", error);
+      setPhotoError(
+        error instanceof Error ? error.message : "Could not remove the profile photo."
+      );
+    } finally {
+      setPhotoRemoving(false);
+    }
   }
 
   async function saveProfilePhoto() {
@@ -1718,9 +1768,21 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 <div className="profile-photo-entry-copy">
                   <strong>Profile photo</strong>
                   <span>Add a photo or keep your first-letter avatar.</span>
-                  <button type="button" className="profile-photo-change-button" onClick={openPhotoPicker}>
-                    {profile.avatarUrl ? "Change photo" : "Add photo"}
-                  </button>
+                  <div className="profile-photo-action-row">
+                    <button type="button" className="profile-photo-change-button" onClick={openPhotoPicker} disabled={photoRemoving || photoSaving}>
+                      {profile.avatarUrl ? "Change photo" : "Add photo"}
+                    </button>
+                    {profile.avatarUrl && (
+                      <button
+                        type="button"
+                        className="profile-photo-remove-button"
+                        onClick={() => void removeProfilePhoto()}
+                        disabled={photoRemoving || photoSaving}
+                      >
+                        {photoRemoving ? "Removing..." : "Remove photo"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
