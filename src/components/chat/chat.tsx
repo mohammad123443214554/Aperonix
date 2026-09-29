@@ -2228,7 +2228,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 setAccountDeleteOpen(false);
                 setAccountDeleteText("");
                 setAccountDeleteError("");
-                router.push("/profile");
+                router.push("/chat");
               }} disabled={accountDeleting}>Cancel</button>
               <button
                 type="button"
