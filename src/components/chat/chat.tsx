@@ -2845,6 +2845,78 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         </div>
       )}
 
+      {shareModal && (
+        <div
+          className="share-modal-backdrop"
+          role="presentation"
+          onClick={() => setShareModal(null)}
+        >
+          <section
+            className="share-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-response-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="share-modal-header">
+              <div>
+                <span className="hero-kicker">Aperonix AI</span>
+                <h2 id="share-response-title">Share response</h2>
+                <p>Share this response with anyone using a link.</p>
+              </div>
+              <button
+                type="button"
+                className="share-modal-close"
+                onClick={() => setShareModal(null)}
+                aria-label="Close share dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="share-response-preview">
+              <ReactMarkdown>{shareModal.content}</ReactMarkdown>
+            </div>
+
+            <div className="share-link-box">
+              <span>{shareModal.url}</span>
+            </div>
+
+            <div className="share-modal-actions">
+              <button
+                type="button"
+                className="share-modal-button share-native-button"
+                onClick={() => void shareViaDevice()}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="18" cy="5" r="2.3" />
+                  <circle cx="6" cy="12" r="2.3" />
+                  <circle cx="18" cy="19" r="2.3" />
+                  <path d="m8.1 10.9 7.7-4.5M8.1 13.1l7.7 4.5" />
+                </svg>
+                <span>{typeof navigator !== "undefined" && typeof navigator.share === "function" ? "Share via device" : "Native sharing unavailable"}</span>
+              </button>
+
+              <button
+                type="button"
+                className="share-modal-button share-copy-button"
+                onClick={() => void copyShareLink()}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="8" y="8" width="11" height="11" rx="2" />
+                  <path d="M16 8V6.8A2.8 2.8 0 0 0 13.2 4H6.8A2.8 2.8 0 0 0 4 6.8v6.4A2.8 2.8 0 0 0 6.8 16H8" />
+                </svg>
+                <span>{shareModal.copied ? "Link copied" : "Copy link"}</span>
+              </button>
+            </div>
+
+            <p className="share-modal-note">
+              Only this selected Aperonix response is shared. Your private chat history is not included.
+            </p>
+          </section>
+        </div>
+      )}
+
       {deleteSession && (
         <div className="chat-modal-backdrop" role="presentation" onClick={() => setDeleteSession(null)}>
           <div className="chat-modal" role="dialog" aria-modal="true" aria-labelledby="delete-chat-title" onClick={(event) => event.stopPropagation()}>
