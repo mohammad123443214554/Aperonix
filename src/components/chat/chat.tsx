@@ -572,15 +572,23 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       return;
     }
 
+    const nextProfile = {
+      ...profileDraft,
+      firstName: profileDraft.firstName.trim(),
+      lastName: profileDraft.lastName.trim(),
+      phoneCountryCode: profileDraft.phoneCountryCode || "+91",
+      phoneNumber: profileDraft.phoneNumber.replace(/\D/g, "")
+    };
+
     const { error: profileError } = await supabase
       .from("profiles")
       .update({
-        first_name: profileDraft.firstName.trim(),
-        last_name: profileDraft.lastName.trim(),
-        date_of_birth: profileDraft.dateOfBirth || null,
-        gender: profileDraft.gender || null,
-        phone_country_code: profileDraft.phoneCountryCode || "+91",
-        phone_number: profileDraft.phoneNumber.replace(/\D/g, "")
+        first_name: nextProfile.firstName,
+        last_name: nextProfile.lastName,
+        date_of_birth: nextProfile.dateOfBirth || null,
+        gender: nextProfile.gender || null,
+        phone_country_code: nextProfile.phoneCountryCode,
+        phone_number: nextProfile.phoneNumber
       })
       .eq("id", userData.user.id);
 
@@ -592,12 +600,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     const { error: metadataError } = await supabase.auth.updateUser({
       data: {
-        first_name: profileDraft.firstName.trim(),
-        last_name: profileDraft.lastName.trim(),
-        date_of_birth: profileDraft.dateOfBirth || null,
-        gender: profileDraft.gender || null,
-        phone_country_code: profileDraft.phoneCountryCode || "+91",
-        phone_number: profileDraft.phoneNumber.replace(/\D/g, "")
+        first_name: nextProfile.firstName,
+        last_name: nextProfile.lastName,
+        date_of_birth: nextProfile.dateOfBirth || null,
+        gender: nextProfile.gender || null,
+        phone_country_code: nextProfile.phoneCountryCode,
+        phone_number: nextProfile.phoneNumber
       }
     });
 
@@ -605,12 +613,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       console.error("Profile metadata update error:", metadataError);
     }
 
-    setProfile({
-      ...profileDraft,
-      firstName: profileDraft.firstName.trim(),
-      lastName: profileDraft.lastName.trim(),
-      phoneNumber: profileDraft.phoneNumber.replace(/\D/g, "")
-    });
+    // Keep the live profile state and editor draft in sync so the
+    // fallback avatar always uses the newly saved first letter.
+    setProfile(nextProfile);
+    setProfileDraft(nextProfile);
     setProfileSaving(false);
     setProfileEditOpen(false);
   }
@@ -676,7 +682,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }
 
   function getProfileInitial() {
-    return getProfileDisplayName().charAt(0).toUpperCase() || "A";
+    const firstName = profile.firstName.trim();
+    const lastName = profile.lastName.trim();
+    return (firstName || lastName || "A").charAt(0).toUpperCase();
   }
 
   function renderProfileAvatar(className = "profile-avatar") {
