@@ -50,8 +50,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = (await request.json()) as { messages?: ChatMessage[] };
+    const body = (await request.json()) as {
+      messages?: ChatMessage[];
+      aperonixSetting?: string;
+    };
     const messages = Array.isArray(body.messages) ? body.messages : [];
+    const requestAperonixSetting =
+      typeof body.aperonixSetting === "string"
+        ? body.aperonixSetting.slice(0, 4000).trim()
+        : "";
 
     const sanitizedMessages = messages
       .filter(
@@ -84,10 +91,16 @@ export async function POST(request: Request) {
       console.error("Aperonix setting load error:", profileError);
     }
 
-    const aperonixSetting =
+    const storedAperonixSetting =
       typeof profileData?.aperonix_setting === "string"
-        ? profileData.aperonix_setting.slice(0, 4000)
+        ? profileData.aperonix_setting.slice(0, 4000).trim()
         : "";
+
+    // The saved profile value is the source of truth. The client value is
+    // a fallback for environments where the profile read is temporarily
+    // blocked by an RLS/schema issue; it is still bounded and cannot
+    // override the protected system prompt.
+    const aperonixSetting = storedAperonixSetting || requestAperonixSetting;
 
     const completion = await getGroqClient().chat.completions.create({
       model: GROQ_MODEL,
