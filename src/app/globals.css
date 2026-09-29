@@ -1617,7 +1617,7 @@ textarea:focus-visible {
 .account-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 110;
+  z-index: 320;
   display: grid;
   place-items: center;
   padding: 18px;
