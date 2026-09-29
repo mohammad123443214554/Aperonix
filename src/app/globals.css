@@ -3780,3 +3780,27 @@ body {
     animation: none;
   }
 }
+
+
+/* Filled thumbs on selected feedback — the hand itself takes the Aperonix color. */
+.message-action-button.is-feedback-good svg,
+.message-action-button.is-feedback-bad svg {
+  fill: currentColor;
+}
+
+.message-action-button.is-feedback-good svg path,
+.message-action-button.is-feedback-bad svg path {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* Keep the two internal thumb paths visually unified after selection. */
+.message-action-button.is-feedback-good svg path:first-child,
+.message-action-button.is-feedback-bad svg path:first-child {
+  opacity: .98;
+}
+
+.message-action-button.is-feedback-good svg path:last-child,
+.message-action-button.is-feedback-bad svg path:last-child {
+  opacity: 1;
+}
