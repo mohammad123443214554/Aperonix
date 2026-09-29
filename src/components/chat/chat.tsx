@@ -1368,7 +1368,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       synthesizer.synthesisCompleted = finish;
 
-      synthesizer.synthesisCanceled = (_sender, event) => {
+      synthesizer.SynthesisCanceled = (_sender, event) => {
         if (generation !== speechGenerationRef.current) return;
         console.error("Azure Speech synthesis canceled:", event);
         finish();
