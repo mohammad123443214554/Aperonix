@@ -3016,6 +3016,20 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   <div className="user-message-content">
                     <div className="user-bubble">
                       <ReactMarkdown>{message.content}</ReactMarkdown>
+
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className="message-attachment-list">
+                          {message.attachments.map((attachment) => (
+                            <div className="message-attachment-card" key={attachment.id}>
+                              <span className="message-attachment-icon" aria-hidden="true">↗</span>
+                              <span className="message-attachment-meta">
+                                <strong>{attachment.fileName}</strong>
+                                <small>{formatFileSize(attachment.sizeBytes)}</small>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="message-actions user-message-actions" aria-label="Message actions">
