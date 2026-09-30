@@ -135,8 +135,7 @@ export async function generateMetadata({
     .replaceAll("#", "")
     .replaceAll("*", "")
     .replaceAll("`", "")
-    .replaceAll("
-", " ")
+    .replaceAll("\n", " ")
     .slice(0, 155);
 
   const fallback =
