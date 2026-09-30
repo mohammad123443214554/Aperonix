@@ -5425,3 +5425,42 @@ body {
     display: none;
   }
 }
+
+/* Branch in new chat response action */
+.branch-response-button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.branch-response-button::after {
+  content: "";
+  position: absolute;
+  width: 30%;
+  height: 185%;
+  top: -42%;
+  left: -57%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.20), transparent);
+  pointer-events: none;
+  transition: transform 540ms cubic-bezier(.2,.75,.2,1);
+}
+
+.branch-response-button:hover:not(:disabled)::after {
+  transform: translateX(430%) rotate(18deg);
+}
+
+.branch-response-button > svg {
+  position: relative;
+  z-index: 1;
+}
+
+.branch-response-button:active:not(:disabled) {
+  transform: translateY(0) scale(.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branch-response-button::after {
+    display: none;
+  }
+}
