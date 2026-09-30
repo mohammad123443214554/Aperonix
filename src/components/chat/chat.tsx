@@ -1930,7 +1930,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           messages: retryContext.map(({ role, content }) => ({ role, content })),
           aperonixSetting,
           branchFromChatId: activeSession.branchFromChatId ?? null,
-          branchFromMessageId: activeSession.branchFromMessageId ?? null
+          branchFromMessageId: activeSession.branchFromMessageId ?? null,
+          chatId: activeSession.id,
+          generateTitle: false
         })
       });
 
@@ -2070,7 +2072,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             messages: editedMessages,
             aperonixSetting,
             branchFromChatId: activeSession.branchFromChatId ?? null,
-            branchFromMessageId: activeSession.branchFromMessageId ?? null
+            branchFromMessageId: activeSession.branchFromMessageId ?? null,
+            chatId: activeSession.id,
+            generateTitle: false
           })
         });
 
@@ -2176,15 +2180,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         }
       ];
 
-      const newTitle =
-        activeSession.title === "New chat"
-          ? makeTitle(content)
-          : activeSession.title;
-
       await supabase
         .from("chat_sessions")
         .update({
-          title: newTitle,
           updated_at: new Date().toISOString()
         })
         .eq("id", activeSession.id);
@@ -2194,7 +2192,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           session.id === activeSession.id
             ? {
                 ...session,
-                title: newTitle,
                 messages: nextMessages,
                 updatedAt: Date.now()
               }
@@ -2212,7 +2209,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           messages: nextMessages,
           aperonixSetting,
           branchFromChatId: activeSession.branchFromChatId ?? null,
-          branchFromMessageId: activeSession.branchFromMessageId ?? null
+          branchFromMessageId: activeSession.branchFromMessageId ?? null,
+          chatId: activeSession.id,
+          generateTitle:
+            activeSession.title === "New chat" &&
+            activeSession.messages.length === 0
         })
       });
 
@@ -2243,9 +2244,20 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       assistantMessage.id = savedAssistantMessage.id;
       assistantMessage.createdAt = new Date(savedAssistantMessage.created_at).getTime();
 
+      const generatedTitle =
+        activeSession.title === "New chat" &&
+        activeSession.messages.length === 0 &&
+        typeof data.title === "string" &&
+        data.title.trim()
+          ? data.title.trim()
+          : activeSession.title;
+
       await supabase
         .from("chat_sessions")
-        .update({ updated_at: new Date().toISOString() })
+        .update({
+          title: generatedTitle,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", activeSession.id);
 
       setSessions((current) =>
@@ -2253,6 +2265,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           session.id === activeSession.id
             ? {
                 ...session,
+                title: generatedTitle,
                 messages: [...session.messages, assistantMessage],
                 updatedAt: Date.now()
               }
