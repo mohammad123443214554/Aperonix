@@ -14,6 +14,8 @@ const TRANSCRIPTION_MODEL = "whisper-large-v3-turbo";
 type AttachmentRow = {
   id: string;
   message_id: string | null;
+  parent_file_id: string | null;
+  frame_timestamp_ms: number | null;
   original_name: string;
   storage_path: string;
   mime_type: string;
@@ -175,10 +177,12 @@ async function processAudioOrVideo(
   return limitText(transcription.text || "No speech was detected in this file.");
 }
 
-async function processImage(
-  attachment: AttachmentRow,
-  url: string
+async function processImages(
+  urls: string[],
+  prompt: string
 ) {
+  const imageUrls = urls.slice(0, 3);
+
   const completion = await getGroqClient().chat.completions.create({
     model: VISION_MODEL,
     messages: [
@@ -187,31 +191,136 @@ async function processImage(
         content: [
           {
             type: "text",
-            text:
-              "Analyze this uploaded image for an AI assistant. Extract visible text with OCR when present, describe important visual content, charts, diagrams, UI, objects, and other details that could help answer a user's question. Be factual and concise. Do not invent details."
+            text: prompt
           },
-          {
-            type: "image_url",
+          ...imageUrls.map((url) => ({
+            type: "image_url" as const,
             image_url: {
               url
             }
-          }
+          }))
         ]
       }
     ],
     temperature: 0.2,
-    max_completion_tokens: 1400,
+    max_completion_tokens: 1800,
     stream: false
   } as any);
 
   return limitText(
-    String(completion.choices[0]?.message?.content ?? "No useful visual information was detected.")
+    String(
+      completion.choices[0]?.message?.content ??
+        "No useful visual information was detected."
+    )
   );
+}
+
+async function processImage(
+  attachment: AttachmentRow,
+  url: string
+) {
+  return processImages(
+    [url],
+    "Analyze this uploaded image for an AI assistant. Extract visible text with OCR when present, describe important visual content, charts, diagrams, UI, objects, and other details that could help answer a user's question. Be factual and concise. Do not invent details."
+  );
+}
+
+async function processAudioOrVideo(
+  url: string
+) {
+  const transcription = await getGroqClient().audio.transcriptions.create({
+    model: TRANSCRIPTION_MODEL,
+    url,
+    response_format: "text",
+    temperature: 0
+  });
+
+  return limitText(transcription.text || "No speech was detected in this file.");
+}
+
+async function processVideo(
+  attachment: AttachmentRow,
+  url: string,
+  frameAttachments: AttachmentRow[],
+  supabase: any
+) {
+  const parts: string[] = [];
+
+  try {
+    const transcript = await processAudioOrVideo(url);
+    parts.push("Audio/speech transcript:\n" + transcript);
+  } catch (error) {
+    console.error("Aperonix video transcription error:", {
+      attachmentId: attachment.id,
+      name: attachment.original_name,
+      error
+    });
+    parts.push("Audio/speech could not be transcribed from this video.");
+  }
+
+  const frames = frameAttachments
+    .filter((frame) => frame.parent_file_id === attachment.id)
+    .sort(
+      (a, b) =>
+        Number(a.frame_timestamp_ms ?? 0) - Number(b.frame_timestamp_ms ?? 0)
+    )
+    .slice(0, 3);
+
+  if (frames.length === 0) {
+    parts.push(
+      "Visual analysis: no extracted video frames are available for this upload."
+    );
+    return parts.join("\n\n");
+  }
+
+  try {
+    const frameData = await Promise.all(
+      frames.map(async (frame) => ({
+        frame,
+        url: await signedUrlFor(supabase, frame.storage_path)
+      }))
+    );
+
+    const visualPrompt =
+      "These are representative frames extracted from an uploaded video. " +
+      "Analyze the visual content across all frames together. Describe what is visibly happening, " +
+      "including people or objects, actions, scenes, on-screen text, UI, colors, and other relevant details. " +
+      "Use the frame timestamps to understand the rough sequence. Do not claim to see motion between frames " +
+      "that is not directly supported. Do not invent details. Return a concise but useful visual summary.";
+
+    const visual = await processImages(
+      frameData.map((item) => item.url),
+      frameData
+        .map(
+          (item, index) =>
+            "Frame " +
+            (index + 1) +
+            " timestamp: " +
+            ((item.frame.frame_timestamp_ms ?? 0) / 1000).toFixed(1) +
+            " seconds."
+        )
+        .join("\n") +
+        "\n\n" +
+        visualPrompt
+    );
+
+    parts.push("Visual frame analysis:\n" + visual);
+  } catch (error) {
+    console.error("Aperonix video visual analysis error:", {
+      attachmentId: attachment.id,
+      name: attachment.original_name,
+      error
+    });
+    parts.push("Visual frame analysis could not be completed for this video.");
+  }
+
+  return parts.join("\n\n");
 }
 
 async function processOne(
   attachment: AttachmentRow,
-  supabase: any
+  supabase: any,
+  frameAttachments: AttachmentRow[]
 ): Promise<ProcessedAttachment> {
   const url = await signedUrlFor(supabase, attachment.storage_path);
   const mime = attachment.mime_type.toLowerCase();
@@ -221,8 +330,15 @@ async function processOne(
 
   if (mime.startsWith("image/")) {
     content = await processImage(attachment, url);
-  } else if (mime.startsWith("audio/") || mime.startsWith("video/")) {
-    content = await processAudioOrVideo(attachment, url);
+  } else if (mime.startsWith("video/")) {
+    content = await processVideo(
+      attachment,
+      url,
+      frameAttachments,
+      supabase
+    );
+  } else if (mime.startsWith("audio/")) {
+    content = await processAudioOrVideo(url);
   } else if (mime === "application/pdf" || extension === "pdf") {
     content = await processPdfFile(attachment, url);
   } else if (
@@ -250,11 +366,21 @@ export async function buildAttachmentContext(
 ) {
   if (!attachments.length) return "";
 
+  const originals = attachments
+    .filter((attachment) => !attachment.parent_file_id)
+    .slice(0, 5);
+
+  const frameAttachments = attachments.filter(
+    (attachment) => Boolean(attachment.parent_file_id)
+  );
+
   const processed: ProcessedAttachment[] = [];
 
-  for (const attachment of attachments.slice(0, 5)) {
+  for (const attachment of originals) {
     try {
-      processed.push(await processOne(attachment, supabase));
+      processed.push(
+        await processOne(attachment, supabase, frameAttachments)
+      );
     } catch (error) {
       console.error("Aperonix attachment processing error:", {
         attachmentId: attachment.id,
