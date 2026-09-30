@@ -1646,6 +1646,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }
 
   async function openChatShareModal(session: ChatSession) {
+    if (isLoading) return;
+
+    stopReadAloud();
     const chatMessages = session.messages
       .filter((message) => message.role === "user" || message.role === "assistant")
       .map((message) => ({
