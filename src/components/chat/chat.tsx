@@ -521,6 +521,51 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           messageRows = rows ?? [];
         }
 
+        let attachmentRows: Array<{
+          id: string;
+          chat_id: string;
+          message_id: string;
+          file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          storage_path: string;
+          created_at: string;
+        }> = [];
+
+        if (chatIds.length > 0) {
+          const { data: rows, error: attachmentsError } = await supabase
+            .from("chat_attachments")
+            .select("id,chat_id,message_id,file_name,mime_type,size_bytes,storage_path,created_at")
+            .in("chat_id", chatIds)
+            .order("created_at", { ascending: true });
+
+          if (
+            attachmentsError &&
+            !/does not exist|relation .*chat_attachments/i.test(attachmentsError.message)
+          ) {
+            throw attachmentsError;
+          }
+
+          attachmentRows = rows ?? [];
+        }
+
+        const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
+
+        for (const row of attachmentRows) {
+          const items = attachmentsByMessageId.get(row.message_id) ?? [];
+          items.push({
+            id: row.id,
+            chatId: row.chat_id,
+            messageId: row.message_id,
+            fileName: row.file_name,
+            mimeType: row.mime_type,
+            sizeBytes: Number(row.size_bytes),
+            storagePath: row.storage_path,
+            createdAt: new Date(row.created_at).getTime()
+          });
+          attachmentsByMessageId.set(row.message_id, items);
+        }
+
         const loaded: ChatSession[] = (chats ?? []).map((chat) => ({
           id: chat.id,
           title: chat.title,
@@ -530,6 +575,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               id,
               role,
               content,
+              attachments: attachmentsByMessageId.get(id) ?? [],
               createdAt: new Date(created_at).getTime()
             })),
           createdAt: new Date(chat.created_at).getTime(),
