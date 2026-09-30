@@ -153,6 +153,7 @@ export async function generateMetadata({
       type: "article"
     }
   };
+}
 
 export default async function SharedResponsePage({
   params
