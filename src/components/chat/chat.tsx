@@ -691,6 +691,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             "x-upsert": "false"
           },
           uploadDataDuringCreation: true,
+          storeFingerprintForResuming: false,
           removeFingerprintOnSuccess: true,
           chunkSize: TUS_CHUNK_SIZE,
           metadata: {
@@ -711,15 +712,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           }
         });
 
-        upload
-          .findPreviousUploads()
-          .then((previousUploads) => {
-            if (previousUploads.length > 0) {
-              upload.resumeFromPreviousUpload(previousUploads[0]);
-            }
-            upload.start();
-          })
-          .catch(reject);
+        upload.start();
       });
     }
 
