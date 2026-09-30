@@ -278,6 +278,42 @@ export async function POST(request: Request) {
 
 
 
+    const attachmentMessageIds = Array.from(
+      new Set(
+        effectiveMessages
+          .map((message) => message.id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      )
+    );
+
+    let attachmentContext = "";
+
+    if (attachmentMessageIds.length > 0) {
+      const { data: attachmentRows, error: attachmentError } = await authClient
+        .from("aperonix_files")
+        .select(
+          "id,message_id,original_name,storage_path,mime_type,size_bytes,status"
+        )
+        .eq("user_id", authData.user.id)
+        .eq("chat_id", requestedChatId || branchFromChatId || "")
+        .eq("status", "ready")
+        .in("message_id", attachmentMessageIds)
+        .order("created_at", { ascending: true });
+
+      if (attachmentError) {
+        console.error("Aperonix attachment lookup error:", attachmentError);
+        return NextResponse.json(
+          { error: "Could not load the attached files." },
+          { status: 500 }
+        );
+      }
+
+      if (attachmentRows && attachmentRows.length > 0) {
+        const { buildAttachmentContext } = await import("@/lib/ai/attachments");
+        attachmentContext = await buildAttachmentContext(authClient, attachmentRows);
+      }
+    }
+
     const { data: profileData, error: profileError } = await authClient
       .from("profiles")
       .select("aperonix_setting")
@@ -297,9 +333,26 @@ export async function POST(request: Request) {
     // Never trust a client-provided persona/settings value for AI behavior.
     const aperonixSetting = storedAperonixSetting;
 
+    const groqMessages = buildGroqMessages(effectiveMessages, aperonixSetting);
+
+    if (attachmentContext) {
+      const lastUserMessageIndex = groqMessages
+        .map((message) => message.role)
+        .lastIndexOf("user");
+
+      if (lastUserMessageIndex >= 0) {
+        const lastUserMessage = groqMessages[lastUserMessageIndex];
+
+        if (typeof lastUserMessage.content === "string") {
+          lastUserMessage.content =
+            lastUserMessage.content + "\n\n" + attachmentContext;
+        }
+      }
+    }
+
     const completion = await getGroqClient().chat.completions.create({
       model: GROQ_MODEL,
-      messages: buildGroqMessages(effectiveMessages, aperonixSetting),
+      messages: groqMessages,
       temperature: 0.7,
       max_completion_tokens: 2048,
       stream: false
