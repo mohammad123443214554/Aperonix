@@ -206,7 +206,7 @@ export default async function SharedResponsePage({
                     className={`shared-chat-message ${message.role === "user" ? "is-user" : "is-assistant"}`}
                   >
                     <div className="shared-chat-role">
-                      {message.role === "user" ? "You" : "Aperonix AI"}
+                      {message.role === "user" ? "User" : "Aperonix AI"}
                     </div>
                     <div className="shared-chat-message-content">
                       <ReactMarkdown>{message.content}</ReactMarkdown>
