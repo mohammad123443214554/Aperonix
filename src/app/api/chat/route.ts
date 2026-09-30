@@ -166,7 +166,7 @@ export async function POST(request: Request) {
     const requestedAttachmentIds = Array.isArray(body.attachmentIds)
       ? body.attachmentIds.filter(
           (id): id is string => typeof id === "string" && id.length > 0
-        ).slice(0, 5)
+        ).slice(0, 20)
       : [];
 
     if (requestedChatId) {
