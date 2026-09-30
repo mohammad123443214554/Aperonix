@@ -683,7 +683,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const isEmptyChat = Boolean(activeSession && messages.length === 0);
 
   const canSend = useMemo(
-    () => input.trim().length > 0 && !isLoading && Boolean(activeSession),
+    () =>
+      (input.trim().length > 0 || pendingFiles.length > 0) &&
+      !isLoading &&
+      Boolean(activeSession),
     [input, isLoading, activeSession]
   );
 
@@ -3089,6 +3092,44 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         </section>
 
         <div className="composer-wrap">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.html,.htm,.css,.scss,.less,.js,.jsx,.mjs,.cjs,.ts,.tsx,.py,.pyw,.java,.c,.h,.cc,.cpp,.cxx,.hpp,.cs,.go,.rs,.php,.rb,.swift,.kt,.kts,.sql,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.toml,.ini,.cfg,.conf,.yaml,.yml,.env,.log,.tex,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.mp4,.mov,.webm,.mkv"
+            className="chat-file-input"
+            onChange={handleFileSelection}
+          />
+
+          {fileUploadError && (
+            <div className="chat-file-error" role="alert">
+              {fileUploadError}
+            </div>
+          )}
+
+          {pendingFiles.length > 0 && (
+            <div className="composer-attachments" aria-label="Files ready to upload">
+              {pendingFiles.map((file, index) => (
+                <div className="composer-attachment-card" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                  <span className="composer-attachment-icon" aria-hidden="true">↗</span>
+                  <span className="composer-attachment-meta">
+                    <strong>{file.name}</strong>
+                    <small>{formatFileSize(file.size)}</small>
+                  </span>
+                  <button
+                    type="button"
+                    className="composer-attachment-remove"
+                    onClick={() => removePendingFile(index)}
+                    disabled={isLoading}
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {editingMessageId && (
             <div className="composer-editing-bar" role="status">
               <span>Editing message</span>
@@ -3118,7 +3159,18 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             />
 
             <div className="composer-toolbar">
-              <span className="composer-plus" aria-hidden="true">+</span>
+              <button
+                type="button"
+                className={`composer-plus-button ${filePickerOpen ? "is-open" : ""}`}
+                onClick={openFilePicker}
+                disabled={isLoading || Boolean(editingMessageId)}
+                aria-label="Attach files"
+                title={editingMessageId ? "Attachments are disabled while editing" : "Attach files"}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
 
               <button
                 type="submit"
