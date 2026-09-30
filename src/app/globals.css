@@ -3130,6 +3130,26 @@ body {
   color: #fff;
 }
 
+.composer-file-upload-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 11px;
+  border: 1px solid rgba(70, 194, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(8, 23, 48, 0.72);
+  color: rgba(224, 240, 255, 0.82);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.composer-file-upload-status strong {
+  color: #8fe7ff;
+  font-variant-numeric: tabular-nums;
+}
+
 .composer-file-error {
   position: relative;
   z-index: 2;
