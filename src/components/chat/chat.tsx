@@ -2806,7 +2806,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           generateTitle:
             activeSession.title === "New chat" &&
             activeSession.messages.length === 0,
-          attachmentIds: uploadedOriginalFilesForPrompt.map((file) => file.id)
+          attachmentIds: uploadedFilesForPrompt.map((file) => file.id)
         })
       });
 
