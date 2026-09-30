@@ -1779,7 +1779,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         },
         body: JSON.stringify({
           messages: retryContext.map(({ role, content }) => ({ role, content })),
-          aperonixSetting
+          aperonixSetting,
+          branchFromChatId: activeSession.branchFromChatId ?? null,
+          branchFromMessageId: activeSession.branchFromMessageId ?? null
         })
       });
 
@@ -1940,7 +1942,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         },
         body: JSON.stringify({
           messages: nextMessages,
-          aperonixSetting
+          aperonixSetting,
+          branchFromChatId: activeSession.branchFromChatId ?? null,
+          branchFromMessageId: activeSession.branchFromMessageId ?? null
         })
       });
 
