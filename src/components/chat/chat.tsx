@@ -3421,7 +3421,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                       className={`share-chat-preview-message ${message.role === "user" ? "is-user" : "is-assistant"}`}
                     >
                       <div className="share-chat-preview-role">
-                        {message.role === "user" ? "You" : "Aperonix AI"}
+                        {message.role === "user" ? "User" : "Aperonix AI"}
                       </div>
                       <div className="share-chat-preview-content">
                         <ReactMarkdown>{message.content}</ReactMarkdown>
