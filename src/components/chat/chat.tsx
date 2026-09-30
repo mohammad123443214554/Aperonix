@@ -1640,6 +1640,50 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  async function branchResponseInNewChat(message: ChatMessage) {
+    if (isLoading || !activeSession || !message.id) return;
+
+    stopReadAloud();
+    setOpenMenuId(null);
+    setShareModal(null);
+
+    try {
+      const user = await ensureAuthenticatedUser();
+
+      const { data, error } = await supabase
+        .from("chat_sessions")
+        .insert({
+          user_id: user.id,
+          title: "New chat",
+          is_pinned: false,
+          branch_from_chat_id: activeSession.id,
+          branch_from_message_id: message.id
+        })
+        .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
+        .single();
+
+      if (error) throw error;
+
+      const next: ChatSession = {
+        id: data.id,
+        title: data.title,
+        messages: [],
+        createdAt: new Date(data.created_at).getTime(),
+        updatedAt: new Date(data.updated_at).getTime(),
+        isPinned: Boolean(data.is_pinned),
+        branchFromChatId: data.branch_from_chat_id ?? activeSession.id,
+        branchFromMessageId: data.branch_from_message_id ?? message.id
+      };
+
+      setSessions((current) => sortSessions([...current, next]));
+      setActiveSessionId(next.id);
+      setInput("");
+      setIsSidebarOpen(false);
+      navigate("/chat/" + next.id);
+    } catch (error) {
+      console.error("Branch response error:", error);
+    }
+  }
   async function handleFeedback(message: ChatMessage, feedback: FeedbackType) {
     if (isLoading || !activeSession || !message.id) return;
 
@@ -2291,6 +2335,23 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                           <circle cx="6" cy="12" r="2.3" />
                           <circle cx="18" cy="19" r="2.3" />
                           <path d="m8.1 10.9 7.7-4.5M8.1 13.1l7.7 4.5" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="message-action-button branch-response-button"
+                        onClick={() => void branchResponseInNewChat(message)}
+                        disabled={isLoading || !message.id}
+                        aria-label="Branch in new chat"
+                        title="Branch in new chat"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="7" cy="6" r="2.1" />
+                          <circle cx="7" cy="18" r="2.1" />
+                          <circle cx="17" cy="12" r="2.1" />
+                          <path d="M7 8.1v2.5a3.4 3.4 0 0 0 3.4 3.4H17" />
+                          <path d="M7 15.9v-2.5a3.4 3.4 0 0 1 3.4-3.4H17" />
                         </svg>
                       </button>
 
