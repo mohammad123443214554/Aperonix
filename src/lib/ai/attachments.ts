@@ -147,7 +147,9 @@ async function processPdfFile(attachment: AttachmentRow, url: string) {
     const text = String(result.text ?? "");
     return limitText(text);
   } finally {
-    await pdf.destroy();
+    if (typeof (pdf as unknown as { destroy?: () => Promise<void> }).destroy === "function") {
+      await (pdf as unknown as { destroy: () => Promise<void> }).destroy();
+    }
   }
 }
 
