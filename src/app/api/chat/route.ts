@@ -307,7 +307,8 @@ export async function POST(request: Request) {
           .eq("status", "ready")
           .in("chat_id", attachmentChatIds)
           .in("message_id", attachmentMessageIds)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: false })
+          .limit(5);
 
       if (attachmentError) {
         console.error("Aperonix attachment lookup error:", attachmentError);
