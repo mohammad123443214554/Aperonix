@@ -15,6 +15,7 @@ import {
 } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { createPortal } from "react-dom";
+import { Upload } from "tus-js-client";
 
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
@@ -239,6 +240,9 @@ function createReadableMarkdownComponents(
 
   return components;
 }
+const APERONIX_FILES_BUCKET = "aperonix-files";
+const RESUMABLE_UPLOAD_THRESHOLD = 6 * 1024 * 1024;
+const TUS_CHUNK_SIZE = 6 * 1024 * 1024;
 async function ensureAuthenticatedUser() {
   const { data, error } = await supabase.auth.getUser();
 
@@ -275,6 +279,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [fileSelectionError, setFileSelectionError] = useState("");
+  const [fileUploadProgress, setFileUploadProgress] = useState(0);
+  const [fileUploadStatus, setFileUploadStatus] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -578,8 +584,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const isEmptyChat = Boolean(activeSession && messages.length === 0);
 
   const canSend = useMemo(
-    () => input.trim().length > 0 && !isLoading && Boolean(activeSession),
-    [input, isLoading, activeSession]
+    () =>
+      (input.trim().length > 0 || selectedFiles.length > 0) &&
+      !isLoading &&
+      Boolean(activeSession) &&
+      !editingMessageId,
+    [input, selectedFiles.length, isLoading, activeSession, editingMessageId]
   );
 
   const MAX_FILES_PER_PROMPT = 5;
@@ -613,6 +623,143 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       return `${Math.max(1, Math.round(bytes / 1024))} KB`;
     }
     return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  }
+
+  function getStorageExtension(file: File) {
+    const rawName = file.name.split("/").pop()?.split("\\").pop() ?? "";
+    const dotIndex = rawName.lastIndexOf(".");
+    if (dotIndex <= 0 || dotIndex === rawName.length - 1) return "";
+    return rawName
+      .slice(dotIndex + 1)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 12);
+  }
+
+  function createStoragePath(userId: string, chatId: string, file: File) {
+    const extension = getStorageExtension(file);
+    const uniqueName = crypto.randomUUID();
+    return userId + "/" + chatId + "/" + uniqueName + (extension ? "." + extension : "");
+  }
+
+  async function uploadFileToStorage(
+    file: File,
+    userId: string,
+    chatId: string,
+    accessToken: string,
+    onProgress: (percentage: number) => void
+  ) {
+    const storagePath = createStoragePath(userId, chatId, file);
+    const contentType = file.type || "application/octet-stream";
+
+    if (file.size <= RESUMABLE_UPLOAD_THRESHOLD) {
+      const { error } = await supabase.storage
+        .from(APERONIX_FILES_BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          contentType,
+          upsert: false
+        });
+
+      if (error) throw error;
+      onProgress(100);
+    } else {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+      if (!supabaseUrl || !publishableKey) {
+        throw new Error("Supabase environment variables are not configured.");
+      }
+
+      let projectRef = "";
+      try {
+        projectRef = new URL(supabaseUrl).hostname.split(".")[0];
+      } catch {
+        throw new Error("The Supabase project URL is invalid.");
+      }
+
+      if (!projectRef) {
+        throw new Error("Could not determine the Supabase project reference.");
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const upload = new Upload(file, {
+          endpoint: "https://" + projectRef + ".storage.supabase.co/storage/v1/upload/resumable",
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            authorization: "Bearer " + accessToken,
+            apikey: publishableKey,
+            "x-upsert": "false"
+          },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          chunkSize: TUS_CHUNK_SIZE,
+          metadata: {
+            bucketName: APERONIX_FILES_BUCKET,
+            objectName: storagePath,
+            contentType,
+            cacheControl: "3600"
+          },
+          onError: reject,
+          onProgress: (bytesUploaded, bytesTotal) => {
+            const percentage =
+              bytesTotal > 0 ? Math.round((bytesUploaded / bytesTotal) * 100) : 0;
+            onProgress(percentage);
+          },
+          onSuccess: () => {
+            onProgress(100);
+            resolve();
+          }
+        });
+
+        upload
+          .findPreviousUploads()
+          .then((previousUploads) => {
+            if (previousUploads.length > 0) {
+              upload.resumeFromPreviousUpload(previousUploads[0]);
+            }
+            upload.start();
+          })
+          .catch(reject);
+      });
+    }
+
+    const { data, error: metadataError } = await supabase
+      .from("aperonix_files")
+      .insert({
+        user_id: userId,
+        chat_id: chatId,
+        original_name: file.name,
+        storage_path: storagePath,
+        mime_type: contentType,
+        size_bytes: file.size,
+        status: "uploaded"
+      })
+      .select("id,storage_path")
+      .single();
+
+    if (metadataError || !data) {
+      await supabase.storage
+        .from(APERONIX_FILES_BUCKET)
+        .remove([storagePath]);
+      throw metadataError ?? new Error("Could not save file metadata.");
+    }
+
+    return {
+      id: data.id as string,
+      storagePath: data.storage_path as string
+    };
+  }
+
+  async function deleteUploadedFile(storagePath: string, metadataId: string) {
+    await supabase
+      .from("aperonix_files")
+      .delete()
+      .eq("id", metadataId);
+
+    await supabase.storage
+      .from(APERONIX_FILES_BUCKET)
+      .remove([storagePath]);
   }
 
   function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
@@ -665,8 +812,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }
 
   function removeSelectedFile(index: number) {
+    if (isLoading) return;
     setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
     setFileSelectionError("");
+    setFileUploadStatus("");
+    setFileUploadProgress(0);
   }
 
   useEffect(() => {
@@ -2109,10 +2259,20 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     const content = input.trim();
 
-    if (!content || isLoading || !activeSession) return;
+    if ((!content && selectedFiles.length === 0) || isLoading || !activeSession) return;
+
+    if (editingMessageId && selectedFiles.length > 0) {
+      setFileSelectionError("Remove attached files before editing this message.");
+      return;
+    }
 
     stopReadAloud();
     setIsLoading(true);
+    setFileUploadStatus("");
+    setFileUploadProgress(0);
+
+    const uploadedFilesForPrompt: Array<{ id: string; storagePath: string }> = [];
+    let attachmentsCommitted = false;
 
     try {
       const user = await ensureAuthenticatedUser();
@@ -2249,6 +2409,34 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         return;
       }
 
+      if (selectedFiles.length > 0) {
+        for (let index = 0; index < selectedFiles.length; index += 1) {
+          const file = selectedFiles[index];
+          setFileUploadStatus(
+            "Uploading " +
+              (index + 1) +
+              "/" +
+              selectedFiles.length +
+              ": " +
+              file.name
+          );
+          setFileUploadProgress(0);
+
+          const uploaded = await uploadFileToStorage(
+            file,
+            user.id,
+            activeSession.id,
+            accessToken,
+            (percentage) => setFileUploadProgress(percentage)
+          );
+
+          uploadedFilesForPrompt.push(uploaded);
+        }
+
+        setFileUploadStatus("Files uploaded successfully.");
+        setFileUploadProgress(100);
+      }
+
       setInput("");
 
       const { data: savedUserMessage, error: messageError } = await supabase
@@ -2263,6 +2451,24 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         .single();
 
       if (messageError) throw messageError;
+
+      if (uploadedFilesForPrompt.length > 0) {
+        const { error: attachmentLinkError } = await supabase
+          .from("aperonix_files")
+          .update({ message_id: savedUserMessage.id, status: "ready" })
+          .in(
+            "id",
+            uploadedFilesForPrompt.map((file) => file.id)
+          );
+
+        if (attachmentLinkError) throw attachmentLinkError;
+      }
+
+      attachmentsCommitted = true;
+      setSelectedFiles([]);
+      setFileSelectionError("");
+      setFileUploadStatus("");
+      setFileUploadProgress(0);
 
       const nextMessages: ChatMessage[] = [
         ...activeSession.messages,
@@ -2368,6 +2574,19 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       );
     } catch (error) {
       console.error("Aperonix chat error:", error);
+
+      if (!attachmentsCommitted && uploadedFilesForPrompt.length > 0) {
+        await Promise.all(
+          uploadedFilesForPrompt.map((file) =>
+            deleteUploadedFile(file.storagePath, file.id)
+          )
+        );
+      }
+
+      if (uploadedFilesForPrompt.length > 0) {
+        setFileUploadStatus("");
+        setFileUploadProgress(0);
+      }
 
       if (editingMessageId) {
         setInput(content);
@@ -2941,7 +3160,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               <div className="composer-file-area" aria-label="Selected files">
                 <div className="composer-file-header">
                   <span>Attached files</span>
-                  <span>{selectedFiles.length}/5</span>
+                  <span>
+                    {fileUploadStatus ? fileUploadProgress + "%" : selectedFiles.length + "/5"}
+                  </span>
                 </div>
 
                 <div className="composer-file-list">
@@ -2973,6 +3194,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             {fileSelectionError && (
               <div className="composer-file-error" role="alert">
                 {fileSelectionError}
+              </div>
+            )}
+
+            {fileUploadStatus && (
+              <div className="composer-file-upload-status" role="status" aria-live="polite">
+                <span>{fileUploadStatus}</span>
+                <strong>{fileUploadProgress}%</strong>
               </div>
             )}
 
