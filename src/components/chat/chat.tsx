@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
-import type { ChatMessage, ChatSession, FeedbackType } from "@/types/chat";
+import type { ChatAttachment, ChatMessage, ChatSession, FeedbackType } from "@/types/chat";
 
 const welcomeMessage: ChatMessage = {
   role: "assistant",
@@ -112,6 +112,65 @@ function createLocalSession(): ChatSession {
 function makeTitle(content: string) {
   const cleaned = content.replace(/\s+/g, " ").trim();
   return cleaned.length > 38 ? `${cleaned.slice(0, 38)}…` : cleaned || "New chat";
+}
+
+const MAX_CHAT_FILES_PER_MESSAGE = 5;
+
+const FILE_SIZE_LIMITS = {
+  image: 10 * 1024 * 1024,
+  document: 25 * 1024 * 1024,
+  spreadsheet: 15 * 1024 * 1024,
+  text: 10 * 1024 * 1024,
+  audio: 25 * 1024 * 1024,
+  video: 50 * 1024 * 1024,
+  other: 10 * 1024 * 1024
+} as const;
+
+const ALLOWED_FILE_EXTENSIONS = new Set([
+  "pdf", "docx", "txt", "md", "markdown", "csv", "tsv", "json", "xml", "html", "htm",
+  "css", "scss", "less", "js", "jsx", "mjs", "cjs", "ts", "tsx", "py", "pyw",
+  "java", "c", "h", "cc", "cpp", "cxx", "hpp", "cs", "go", "rs", "php", "rb",
+  "swift", "kt", "kts", "sql", "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd",
+  "toml", "ini", "cfg", "conf", "yaml", "yml", "env", "log", "tex",
+  "xlsx", "xls", "png", "jpg", "jpeg", "webp", "gif", "mp3", "wav", "m4a", "ogg",
+  "mp4", "mov", "webm", "mkv"
+]);
+
+function getFileExtension(fileName: string) {
+  return fileName.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
+}
+
+function getFileLimitCategory(file: File) {
+  const ext = getFileExtension(file.name);
+
+  if (file.type.startsWith("image/")) return "image" as const;
+  if (file.type.startsWith("video/")) return "video" as const;
+  if (file.type.startsWith("audio/")) return "audio" as const;
+  if (["pdf", "docx"].includes(ext)) return "document" as const;
+  if (["xlsx", "xls", "csv", "tsv"].includes(ext)) return "spreadsheet" as const;
+
+  if (
+    file.type.startsWith("text/") ||
+    ["txt", "md", "markdown", "json", "xml", "html", "htm", "css", "scss", "less",
+      "js", "jsx", "mjs", "cjs", "ts", "tsx", "py", "pyw", "java", "c", "h", "cc",
+      "cpp", "cxx", "hpp", "cs", "go", "rs", "php", "rb", "swift", "kt", "kts",
+      "sql", "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd", "toml", "ini",
+      "cfg", "conf", "yaml", "yml", "env", "log", "tex"].includes(ext)
+  ) {
+    return "text" as const;
+  }
+
+  return "other" as const;
+}
+
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatFileLimit(bytes: number) {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
 }
 
 function sortSessions(items: ChatSession[]) {
@@ -336,6 +395,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [accountDeleteError, setAccountDeleteError] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [fileUploadError, setFileUploadError] = useState("");
+  const [filePickerOpen, setFilePickerOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [readAloudMessageKey, setReadAloudMessageKey] = useState<string | null>(null);
   const [readAloudStatus, setReadAloudStatus] = useState<"idle" | "loading" | "speaking">("idle");
   const [readAloudWordIndex, setReadAloudWordIndex] = useState<number | null>(null);
