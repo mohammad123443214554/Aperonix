@@ -3158,53 +3158,89 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   </div>
                 ) : (
                   <div className="user-message-content">
-                    <div className="user-bubble">
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="message-attachments" aria-label="Attached files">
-                          {message.attachments.map((attachment) => {
-                            const isImage = attachment.mimeType.toLowerCase().startsWith("image/");
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="message-attachments" aria-label="Attached files">
+                        {message.attachments.map((attachment) => {
+                          const mime = attachment.mimeType.toLowerCase();
+                          const isImage = mime.startsWith("image/");
+                          const isVideo = mime.startsWith("video/");
+                          const isAudio = mime.startsWith("audio/");
 
+                          if (isVideo && attachment.url) {
                             return (
-                              <a
+                              <div
                                 key={attachment.id}
-                                className={`message-attachment-card ${isImage ? "is-image" : ""}`}
-                                href={attachment.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                title={attachment.name}
+                                className="message-attachment-video-card"
                               >
-                                {isImage && attachment.url ? (
-                                  <img
-                                    src={attachment.url}
-                                    alt={attachment.name}
-                                    className="message-attachment-image"
-                                  />
-                                ) : (
-                                  <span className="message-attachment-icon" aria-hidden="true">
-                                    <svg viewBox="0 0 24 24">
-                                      <path d="M7 3.5h7l4 4v13H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z" />
-                                      <path d="M14 3.5v5h4M8.5 13h7M8.5 16h5" />
-                                    </svg>
-                                  </span>
-                                )}
-
-                                <span className="message-attachment-meta">
-                                  <strong>{attachment.name}</strong>
-                                  <span>
-                                    {formatFileSize(attachment.sizeBytes)}
-                                    {isImage ? " • Image" : " • File"}
-                                  </span>
-                                </span>
-
-                                <span className="message-attachment-open" aria-hidden="true">
-                                  ↗
-                                </span>
-                              </a>
+                                <video
+                                  className="message-attachment-video"
+                                  src={attachment.url}
+                                  controls
+                                  playsInline
+                                  preload="metadata"
+                                />
+                                <div className="message-attachment-footer">
+                                  <div className="message-attachment-meta">
+                                    <strong title={attachment.name}>{attachment.name}</strong>
+                                    <span>{formatFileSize(attachment.sizeBytes)} • Video</span>
+                                  </div>
+                                  <a
+                                    className="message-attachment-open"
+                                    href={attachment.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="Open video"
+                                    aria-label={`Open ${attachment.name}`}
+                                  >
+                                    ↗
+                                  </a>
+                                </div>
+                              </div>
                             );
-                          })}
-                        </div>
-                      )}
+                          }
 
+                          return (
+                            <a
+                              key={attachment.id}
+                              className={`message-attachment-card ${isImage ? "is-image" : ""}`}
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={attachment.name}
+                            >
+                              {isImage && attachment.url ? (
+                                <img
+                                  src={attachment.url}
+                                  alt={attachment.name}
+                                  className="message-attachment-image"
+                                />
+                              ) : (
+                                <span className="message-attachment-icon" aria-hidden="true">
+                                  <svg viewBox="0 0 24 24">
+                                    <path d="M7 3.5h7l4 4v13H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2v-13a2 2 0 0 1 2-2Z" />
+                                    <path d="M14 3.5v5h4M8.5 13h7M8.5 16h5" />
+                                  </svg>
+                                </span>
+                              )}
+
+                              <span className="message-attachment-meta">
+                                <strong title={attachment.name}>{attachment.name}</strong>
+                                <span>
+                                  {formatFileSize(attachment.sizeBytes)}
+                                  {isImage ? " • Image" : isAudio ? " • Audio" : " • File"}
+                                </span>
+                              </span>
+
+                              <span className="message-attachment-open" aria-hidden="true">
+                                ↗
+                              </span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="user-bubble">
                       {message.content && (
                         <div className="user-message-text">
                           <ReactMarkdown>{message.content}</ReactMarkdown>
