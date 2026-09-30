@@ -281,6 +281,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [shareModal, setShareModal] = useState<{
     url: string | null;
     content: string;
+    kind: "response" | "prompt";
     copied: boolean;
     preparing: boolean;
   } | null>(null);
@@ -1585,12 +1586,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     return data.url as string;
   }
 
-  async function openShareModal(message: ChatMessage, index: number) {
-    const key = messageReadAloudKey(message, index);
-
+  async function openShareModal(message: ChatMessage) {
     setShareModal({
       url: null,
       content: message.content,
+      kind: message.role === "user" ? "prompt" : "response",
       copied: false,
       preparing: true
     });
@@ -2528,7 +2528,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                       <button
                         type="button"
                         className="message-action-button share-response-button"
-                        onClick={() => void openShareModal(message, index)}
+                        onClick={() => void openShareModal(message)}
                         disabled={isLoading || !message.id}
                         aria-label="Share response"
                         title="Share"
@@ -2663,6 +2663,40 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                           <path d="m14.6 6.4 3.1 3.1" />
                         </svg>
                       </button>
+
+                      <button
+                        type="button"
+                        className="message-action-button"
+                        onClick={() => void copyMessage(message)}
+                        disabled={isLoading || !message.id}
+                        aria-label="Copy prompt"
+                        title={copiedMessageId === (message.id ?? `copy-${message.content.slice(0, 24)}`) ? "Copied" : "Copy prompt"}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="8" y="8" width="11" height="11" rx="2" />
+                          <path d="M16 8V6.8A2.8 2.8 0 0 0 13.2 4H6.8A2.8 2.8 0 0 0 4 6.8v6.4A2.8 2.8 0 0 0 6.8 16H8" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="message-action-button share-response-button"
+                        onClick={() => void openShareModal(message)}
+                        disabled={isLoading || !message.id}
+                        aria-label="Share prompt"
+                        title="Share prompt"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="18" cy="5" r="2.3" />
+                          <circle cx="6" cy="12" r="2.3" />
+                          <circle cx="18" cy="19" r="2.3" />
+                          <path d="m8.1 10.9 7.7-4.5M8.1 13.1l7.7 4.5" />
+                        </svg>
+                      </button>
+
+                      {copiedMessageId === (message.id ?? `copy-${message.content.slice(0, 24)}`) && (
+                        <span className="copy-feedback" role="status">Copied</span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3261,8 +3295,14 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             <div className="share-modal-header">
               <div>
                 <span className="hero-kicker">Aperonix AI</span>
-                <h2 id="share-response-title">Share response</h2>
-                <p>Share this response with anyone using a link.</p>
+                <h2 id="share-response-title">
+                  {shareModal.kind === "prompt" ? "Share prompt" : "Share response"}
+                </h2>
+                <p>
+                  {shareModal.kind === "prompt"
+                    ? "Share this prompt with anyone using a link."
+                    : "Share this response with anyone using a link."}
+                </p>
               </div>
               <button
                 type="button"
@@ -3330,7 +3370,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             </div>
 
             <p className="share-modal-note">
-              Only this selected Aperonix response is shared. Your private chat history is not included.
+              {shareModal.kind === "prompt"
+                ? "Only this selected Aperonix prompt is shared. Your private chat history is not included."
+                : "Only this selected Aperonix response is shared. Your private chat history is not included."}
             </p>
           </section>
         </div>
