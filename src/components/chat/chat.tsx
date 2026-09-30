@@ -3158,9 +3158,57 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 ) : (
                   <div className="user-message-content">
                     <div className="user-bubble">
-                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className="message-attachments" aria-label="Attached files">
+                          {message.attachments.map((attachment) => {
+                            const isImage = attachment.mimeType.toLowerCase().startsWith("image/");
 
+                            return (
+                              <a
+                                key={attachment.id}
+                                className={`message-attachment-card ${isImage ? "is-image" : ""}`}
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={attachment.name}
+                              >
+                                {isImage && attachment.url ? (
+                                  <img
+                                    src={attachment.url}
+                                    alt={attachment.name}
+                                    className="message-attachment-image"
+                                  />
+                                ) : (
+                                  <span className="message-attachment-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24">
+                                      <path d="M7 3.5h7l4 4v13H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z" />
+                                      <path d="M14 3.5v5h4M8.5 13h7M8.5 16h5" />
+                                    </svg>
+                                  </span>
+                                )}
 
+                                <span className="message-attachment-meta">
+                                  <strong>{attachment.name}</strong>
+                                  <span>
+                                    {formatFileSize(attachment.sizeBytes)}
+                                    {isImage ? " • Image" : " • File"}
+                                  </span>
+                                </span>
+
+                                <span className="message-attachment-open" aria-hidden="true">
+                                  ↗
+                                </span>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {message.content && (
+                        <div className="user-message-text">
+                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                        </div>
+                      )}
                     </div>
 
                     <div className="message-actions user-message-actions" aria-label="Message actions">
