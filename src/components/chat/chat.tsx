@@ -3217,7 +3217,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                               ) : (
                                 <span className="message-attachment-icon" aria-hidden="true">
                                   <svg viewBox="0 0 24 24">
-                                    <path d="M7 3.5h7l4 4v13H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2v-13a2 2 0 0 1 2-2Z" />
+                                    <path d="M7 3.5h7l4 4v13H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Z" />
                                     <path d="M14 3.5v5h4M8.5 13h7M8.5 16h5" />
                                   </svg>
                                 </span>
