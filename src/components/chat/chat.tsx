@@ -885,6 +885,31 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
 
 
+    const { data: chatFiles, error: chatFilesError } = await supabase
+      .from("aperonix_files")
+      .select("storage_path")
+      .eq("chat_id", session.id);
+
+    if (chatFilesError) {
+      console.error("Delete chat files lookup error:", chatFilesError);
+      return;
+    }
+
+    const storagePaths = (chatFiles ?? [])
+      .map((file) => file.storage_path)
+      .filter((path): path is string => typeof path === "string" && path.length > 0);
+
+    if (storagePaths.length > 0) {
+      const { error: storageDeleteError } = await supabase.storage
+        .from(APERONIX_FILES_BUCKET)
+        .remove(storagePaths);
+
+      if (storageDeleteError) {
+        console.error("Delete chat files error:", storageDeleteError);
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from("chat_sessions")
       .delete()
