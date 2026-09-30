@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ChangeEvent,
   Children,
   FormEvent,
   cloneElement,
@@ -19,7 +18,7 @@ import { createPortal } from "react-dom";
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
-import type { ChatAttachment, ChatMessage, ChatSession, FeedbackType } from "@/types/chat";
+import type { ChatMessage, ChatSession, FeedbackType } from "@/types/chat";
 
 const welcomeMessage: ChatMessage = {
   role: "assistant",
@@ -112,65 +111,6 @@ function createLocalSession(): ChatSession {
 function makeTitle(content: string) {
   const cleaned = content.replace(/\s+/g, " ").trim();
   return cleaned.length > 38 ? `${cleaned.slice(0, 38)}…` : cleaned || "New chat";
-}
-
-const MAX_CHAT_FILES_PER_MESSAGE = 5;
-
-const FILE_SIZE_LIMITS = {
-  image: 10 * 1024 * 1024,
-  document: 25 * 1024 * 1024,
-  spreadsheet: 15 * 1024 * 1024,
-  text: 10 * 1024 * 1024,
-  audio: 25 * 1024 * 1024,
-  video: 50 * 1024 * 1024,
-  other: 10 * 1024 * 1024
-} as const;
-
-const ALLOWED_FILE_EXTENSIONS = new Set([
-  "pdf", "docx", "txt", "md", "markdown", "csv", "tsv", "json", "xml", "html", "htm",
-  "css", "scss", "less", "js", "jsx", "mjs", "cjs", "ts", "tsx", "py", "pyw",
-  "java", "c", "h", "cc", "cpp", "cxx", "hpp", "cs", "go", "rs", "php", "rb",
-  "swift", "kt", "kts", "sql", "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd",
-  "toml", "ini", "cfg", "conf", "yaml", "yml", "env", "log", "tex",
-  "xlsx", "xls", "png", "jpg", "jpeg", "webp", "gif", "mp3", "wav", "m4a", "ogg",
-  "mp4", "mov", "webm", "mkv"
-]);
-
-function getFileExtension(fileName: string) {
-  return fileName.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
-}
-
-function getFileLimitCategory(file: File) {
-  const ext = getFileExtension(file.name);
-
-  if (file.type.startsWith("image/")) return "image" as const;
-  if (file.type.startsWith("video/")) return "video" as const;
-  if (file.type.startsWith("audio/")) return "audio" as const;
-  if (["pdf", "docx"].includes(ext)) return "document" as const;
-  if (["xlsx", "xls", "csv", "tsv"].includes(ext)) return "spreadsheet" as const;
-
-  if (
-    file.type.startsWith("text/") ||
-    ["txt", "md", "markdown", "json", "xml", "html", "htm", "css", "scss", "less",
-      "js", "jsx", "mjs", "cjs", "ts", "tsx", "py", "pyw", "java", "c", "h", "cc",
-      "cpp", "cxx", "hpp", "cs", "go", "rs", "php", "rb", "swift", "kt", "kts",
-      "sql", "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd", "toml", "ini",
-      "cfg", "conf", "yaml", "yml", "env", "log", "tex"].includes(ext)
-  ) {
-    return "text" as const;
-  }
-
-  return "other" as const;
-}
-
-function formatFileSize(sizeBytes: number) {
-  if (sizeBytes < 1024) return `${sizeBytes} B`;
-  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatFileLimit(bytes: number) {
-  return `${Math.round(bytes / (1024 * 1024))} MB`;
 }
 
 function sortSessions(items: ChatSession[]) {
@@ -395,10 +335,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [accountDeleteError, setAccountDeleteError] = useState("");
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [fileUploadError, setFileUploadError] = useState("");
-  const [filePickerOpen, setFilePickerOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [readAloudMessageKey, setReadAloudMessageKey] = useState<string | null>(null);
   const [readAloudStatus, setReadAloudStatus] = useState<"idle" | "loading" | "speaking">("idle");
   const [readAloudWordIndex, setReadAloudWordIndex] = useState<number | null>(null);
@@ -521,51 +457,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           messageRows = rows ?? [];
         }
 
-        let attachmentRows: Array<{
-          id: string;
-          chat_id: string;
-          message_id: string;
-          file_name: string;
-          mime_type: string;
-          size_bytes: number;
-          storage_path: string;
-          created_at: string;
-        }> = [];
-
-        if (chatIds.length > 0) {
-          const { data: rows, error: attachmentsError } = await supabase
-            .from("chat_attachments")
-            .select("id,chat_id,message_id,file_name,mime_type,size_bytes,storage_path,created_at")
-            .in("chat_id", chatIds)
-            .order("created_at", { ascending: true });
-
-          if (
-            attachmentsError &&
-            !/does not exist|relation .*chat_attachments/i.test(attachmentsError.message)
-          ) {
-            throw attachmentsError;
-          }
-
-          attachmentRows = rows ?? [];
-        }
-
-        const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
-
-        for (const row of attachmentRows) {
-          const items = attachmentsByMessageId.get(row.message_id) ?? [];
-          items.push({
-            id: row.id,
-            chatId: row.chat_id,
-            messageId: row.message_id,
-            fileName: row.file_name,
-            mimeType: row.mime_type,
-            sizeBytes: Number(row.size_bytes),
-            storagePath: row.storage_path,
-            createdAt: new Date(row.created_at).getTime()
-          });
-          attachmentsByMessageId.set(row.message_id, items);
-        }
-
         const loaded: ChatSession[] = (chats ?? []).map((chat) => ({
           id: chat.id,
           title: chat.title,
@@ -575,7 +466,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               id,
               role,
               content,
-              attachments: attachmentsByMessageId.get(id) ?? [],
               createdAt: new Date(created_at).getTime()
             })),
           createdAt: new Date(chat.created_at).getTime(),
@@ -683,10 +573,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const isEmptyChat = Boolean(activeSession && messages.length === 0);
 
   const canSend = useMemo(
-    () =>
-      (input.trim().length > 0 || pendingFiles.length > 0) &&
-      !isLoading &&
-      Boolean(activeSession),
+    () => input.trim().length > 0 && !isLoading && Boolean(activeSession),
     [input, isLoading, activeSession]
   );
 
@@ -708,8 +595,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     if (isLoading) return;
     stopReadAloud();
     setActiveSessionId(id);
-    setPendingFiles([]);
-    setFileUploadError("");
     setOpenMenuId(null);
     setIsSidebarOpen(false);
     navigate(`/chat/${id}`);
@@ -742,8 +627,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setSessions((current) => sortSessions([...current, next]));
       setActiveSessionId(next.id);
-      setPendingFiles([]);
-      setFileUploadError("");
       navigate(`/chat/${next.id}`);
     } catch (error) {
       console.error("New chat error:", error);
@@ -766,20 +649,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     const session = deleteSession;
     setDeleteSession(null);
 
-    const attachmentPaths = session.messages
-      .flatMap((message) => message.attachments ?? [])
-      .map((attachment) => attachment.storagePath)
-      .filter((path): path is string => Boolean(path));
 
-    if (attachmentPaths.length > 0) {
-      const { error: storageDeleteError } = await supabase.storage
-        .from("chat-files")
-        .remove(attachmentPaths);
-
-      if (storageDeleteError) {
-        console.error("Delete chat files error:", storageDeleteError);
-      }
-    }
 
     const { error } = await supabase
       .from("chat_sessions")
@@ -2014,35 +1884,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     if (removedMessageIds.length === 0) return;
 
-    const removedAttachmentPaths = removedMessages
-      .flatMap((message) => message.attachments ?? [])
-      .map((attachment) => attachment.storagePath)
-      .filter((path): path is string => Boolean(path));
-
-    if (removedAttachmentPaths.length > 0) {
-      const { error: storageDeleteError } = await supabase.storage
-        .from("chat-files")
-        .remove(removedAttachmentPaths);
-
-      if (storageDeleteError) {
-        console.error("Delete removed chat files error:", storageDeleteError);
-      }
-    }
-
-    const { error: attachmentDeleteError } = await supabase
-      .from("chat_attachments")
-      .delete()
-      .eq("chat_id", session.id)
-      .eq("user_id", userId)
-      .in("message_id", removedMessageIds);
-
-    if (
-      attachmentDeleteError &&
-      !/does not exist|relation .*chat_attachments/i.test(attachmentDeleteError.message)
-    ) {
-      throw attachmentDeleteError;
-    }
-
     const { error: messageDeleteError } = await supabase
       .from("chat_messages")
       .delete()
@@ -2171,153 +2012,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
-  function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
-    const selected = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    setFilePickerOpen(false);
-
-    if (selected.length === 0) return;
-
-    if (editingMessageId) {
-      setFileUploadError("Attachments can only be added to a new message.");
-      return;
-    }
-
-    if (pendingFiles.length + selected.length > MAX_CHAT_FILES_PER_MESSAGE) {
-      setFileUploadError(`You can upload up to ${MAX_CHAT_FILES_PER_MESSAGE} files with one prompt.`);
-      return;
-    }
-
-    const invalid = selected.find((file) => {
-      return !ALLOWED_FILE_EXTENSIONS.has(getFileExtension(file.name));
-    });
-
-    if (invalid) {
-      setFileUploadError(`Unsupported file type: ${invalid.name}`);
-      return;
-    }
-
-    const tooLarge = selected.find((file) => {
-      const category = getFileLimitCategory(file);
-      return file.size > FILE_SIZE_LIMITS[category];
-    });
-
-    if (tooLarge) {
-      const category = getFileLimitCategory(tooLarge);
-      setFileUploadError(
-        `${tooLarge.name} is too large. Maximum for this file type is ${formatFileLimit(FILE_SIZE_LIMITS[category])}.`
-      );
-      return;
-    }
-
-    setPendingFiles((current) => [...current, ...selected]);
-    setFileUploadError("");
-  }
-
-  function removePendingFile(index: number) {
-    if (isLoading) return;
-    setPendingFiles((current) =>
-      current.filter((_, currentIndex) => currentIndex !== index)
-    );
-    setFileUploadError("");
-  }
-
-  function openFilePicker() {
-    if (isLoading || editingMessageId) return;
-
-    setFileUploadError("");
-    setFilePickerOpen((current) => !current);
-    window.setTimeout(() => fileInputRef.current?.click(), 0);
-  }
-
-  async function uploadChatFiles(
-    userId: string,
-    chatId: string,
-    messageId: string,
-    files: File[]
-  ): Promise<ChatAttachment[]> {
-    if (files.length === 0) return [];
-
-    const uploadedPaths: string[] = [];
-
-    try {
-      const results: ChatAttachment[] = [];
-
-      for (const file of files) {
-        const safeName =
-          file.name
-            .replace(/[^a-zA-Z0-9._-]+/g, "-")
-            .replace(/-+/g, "-")
-            .slice(0, 120) || "file";
-
-        const storagePath = `${userId}/${chatId}/${crypto.randomUUID()}-${safeName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("chat-files")
-          .upload(storagePath, file, {
-            upsert: false,
-            contentType: file.type || "application/octet-stream"
-          });
-
-        if (uploadError) throw uploadError;
-        uploadedPaths.push(storagePath);
-
-        const { data: attachment, error: attachmentError } = await supabase
-          .from("chat_attachments")
-          .insert({
-            user_id: userId,
-            chat_id: chatId,
-            message_id: messageId,
-            file_name: file.name,
-            mime_type: file.type || "application/octet-stream",
-            size_bytes: file.size,
-            storage_path: storagePath
-          })
-          .select("id,chat_id,message_id,file_name,mime_type,size_bytes,storage_path,created_at")
-          .single();
-
-        if (attachmentError) throw attachmentError;
-
-        results.push({
-          id: attachment.id,
-          chatId: attachment.chat_id,
-          messageId: attachment.message_id,
-          fileName: attachment.file_name,
-          mimeType: attachment.mime_type,
-          sizeBytes: Number(attachment.size_bytes),
-          storagePath: attachment.storage_path,
-          createdAt: new Date(attachment.created_at).getTime()
-        });
-      }
-
-      return results;
-    } catch (error) {
-      if (uploadedPaths.length > 0) {
-        await supabase.storage.from("chat-files").remove(uploadedPaths);
-      }
-
-      await supabase
-        .from("chat_attachments")
-        .delete()
-        .eq("message_id", messageId)
-        .eq("user_id", userId);
-
-      await supabase
-        .from("chat_messages")
-        .delete()
-        .eq("id", messageId)
-        .eq("user_id", userId);
-
-      throw error;
-    }
-  }
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const content =
-      input.trim() ||
-      (pendingFiles.length > 0 ? "Please analyze the attached file(s)." : "");
+    const content = input.trim();
 
     if (!content || isLoading || !activeSession) return;
 
@@ -2474,27 +2172,15 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       if (messageError) throw messageError;
 
-      const filesForMessage = [...pendingFiles];
-      const uploadedChatAttachments = await uploadChatFiles(
-        user.id,
-        activeSession.id,
-        savedUserMessage.id,
-        filesForMessage
-      );
-
       const nextMessages: ChatMessage[] = [
         ...activeSession.messages,
         {
           id: savedUserMessage.id,
           role: "user",
           content,
-          attachments: uploadedChatAttachments,
           createdAt: new Date(savedUserMessage.created_at).getTime()
         }
       ];
-
-      setPendingFiles([]);
-      setFileUploadError("");
 
       await supabase
         .from("chat_sessions")
@@ -3065,19 +2751,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                     <div className="user-bubble">
                       <ReactMarkdown>{message.content}</ReactMarkdown>
 
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="message-attachment-list">
-                          {message.attachments.map((attachment) => (
-                            <div className="message-attachment-card" key={attachment.id}>
-                              <span className="message-attachment-icon" aria-hidden="true">↗</span>
-                              <span className="message-attachment-meta">
-                                <strong>{attachment.fileName}</strong>
-                                <small>{formatFileSize(attachment.sizeBytes)}</small>
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+
                     </div>
 
                     <div className="message-actions user-message-actions" aria-label="Message actions">
@@ -3154,44 +2828,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         </section>
 
         <div className="composer-wrap">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.xml,.html,.htm,.css,.scss,.less,.js,.jsx,.mjs,.cjs,.ts,.tsx,.py,.pyw,.java,.c,.h,.cc,.cpp,.cxx,.hpp,.cs,.go,.rs,.php,.rb,.swift,.kt,.kts,.sql,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.toml,.ini,.cfg,.conf,.yaml,.yml,.env,.log,.tex,.xlsx,.xls,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.m4a,.ogg,.mp4,.mov,.webm,.mkv"
-            className="chat-file-input"
-            onChange={handleFileSelection}
-          />
-
-          {fileUploadError && (
-            <div className="chat-file-error" role="alert">
-              {fileUploadError}
-            </div>
-          )}
-
-          {pendingFiles.length > 0 && (
-            <div className="composer-attachments" aria-label="Files ready to upload">
-              {pendingFiles.map((file, index) => (
-                <div className="composer-attachment-card" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
-                  <span className="composer-attachment-icon" aria-hidden="true">↗</span>
-                  <span className="composer-attachment-meta">
-                    <strong>{file.name}</strong>
-                    <small>{formatFileSize(file.size)}</small>
-                  </span>
-                  <button
-                    type="button"
-                    className="composer-attachment-remove"
-                    onClick={() => removePendingFile(index)}
-                    disabled={isLoading}
-                    aria-label={`Remove ${file.name}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
           {editingMessageId && (
             <div className="composer-editing-bar" role="status">
               <span>Editing message</span>
@@ -3221,18 +2857,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             />
 
             <div className="composer-toolbar">
-              <button
-                type="button"
-                className={`composer-plus-button ${filePickerOpen ? "is-open" : ""}`}
-                onClick={openFilePicker}
-                disabled={isLoading || Boolean(editingMessageId)}
-                aria-label="Attach files"
-                title={editingMessageId ? "Attachments are disabled while editing" : "Attach files"}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
+              <span className="composer-plus" aria-hidden="true">+</span>
 
               <button
                 type="submit"
