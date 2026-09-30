@@ -610,7 +610,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       const next: ChatSession = {
         id: data.id,
-        title: data.title || branchTitle,
+        title: data.title,
         messages: [],
         createdAt: new Date(data.created_at).getTime(),
         updatedAt: new Date(data.updated_at).getTime(),
