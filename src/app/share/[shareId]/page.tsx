@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 type SharedResponse = {
   id: string;
   content: string;
+  content_type: "response" | "prompt";
   created_at: string;
 };
 
@@ -27,7 +28,7 @@ async function getSharedResponse(shareId: string): Promise<SharedResponse | null
 
   const { data, error } = await supabase
     .from("shared_responses")
-    .select("id,content,created_at")
+    .select("id,content,content_type,created_at")
     .eq("id", shareId)
     .maybeSingle();
 
@@ -59,11 +60,19 @@ export async function generateMetadata({
 
   return {
     title: "Aperonix AI",
-    description: description || "A response shared from Aperonix AI.",
+    description:
+      description ||
+      (shared.content_type === "prompt"
+        ? "A prompt shared from Aperonix AI."
+        : "A response shared from Aperonix AI."),
     robots: { index: false, follow: false },
     openGraph: {
       title: "Aperonix AI",
-      description: description || "A response shared from Aperonix AI.",
+      description:
+        description ||
+        (shared.content_type === "prompt"
+          ? "A prompt shared from Aperonix AI."
+          : "A response shared from Aperonix AI."),
       type: "article"
     }
   };
@@ -93,8 +102,14 @@ export default async function SharedResponsePage({
         <section className="shared-response-card" aria-labelledby="shared-response-title">
           <div className="shared-response-heading">
             <span className="shared-response-kicker">APERONIX AI</span>
-            <h1 id="shared-response-title">Shared response</h1>
-            <p>A response shared from Aperonix AI.</p>
+            <h1 id="shared-response-title">
+              {shared.content_type === "prompt" ? "Shared prompt" : "Shared response"}
+            </h1>
+            <p>
+              {shared.content_type === "prompt"
+                ? "A prompt shared from Aperonix AI."
+                : "A response shared from Aperonix AI."}
+            </p>
           </div>
 
           <article className="shared-response-content">
@@ -110,7 +125,9 @@ export default async function SharedResponsePage({
         </section>
 
         <p className="shared-response-note">
-          Only this response was shared. Private chat history is not included.
+          {shared.content_type === "prompt"
+            ? "Only this prompt was shared. Private chat history is not included."
+            : "Only this response was shared. Private chat history is not included."}
         </p>
       </div>
     </main>
