@@ -36,7 +36,7 @@ function escapeIlike(value: string) {
 async function createUniqueChatTitle(
   prompt: string,
   response: string,
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createClient<any>>,
   userId: string,
   chatId: string
 ) {
