@@ -12,10 +12,13 @@ export const runtime = "nodejs";
 
 function cleanGeneratedTitle(value: string, fallback: string) {
   const cleaned = value
+    .replace(/[\\*#_~\[\]{}<>|`]/g, "")
     .replace(/^\s*["'“”‘’]+|["'“”‘’]+\s*$/g, "")
     .replace(/^\s*(title|chat name|conversation name)\s*:\s*/i, "")
-    .replace(/^\s*[-*#]+\s*/g, "")
+    .replace(/[\u0900-\u097F]/g, "")
     .replace(/\s+/g, " ")
+    .replace(/[^\x00-\x7F]/g, "")
+    .replace(/\s{2,}/g, " ")
     .trim()
     .slice(0, 60);
 
@@ -52,7 +55,9 @@ async function createUniqueChatTitle(
           content:
             "Generate a concise, natural title for this chat from the user's first message and Aperonix AI's response. " +
             "Use 2 to 6 words. Capture the main topic, goal, or task rather than copying the user's sentence. " +
-            "Use the same language style as the conversation. Return only the title, with no quotes, markdown, emojis, or explanation."
+            "Always write the title in English or Roman Hinglish using Latin/English letters only, even when the conversation uses Hindi script. " +
+            "Do not use Devanagari, Urdu script, markdown, asterisks, hashtags, emojis, quotes, bullets, or explanation. " +
+            "Return only the plain text title."
         },
         {
           role: "user",
