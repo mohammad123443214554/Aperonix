@@ -698,12 +698,168 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     return userId + "/" + chatId + "/" + uniqueName + (extension ? "." + extension : "");
   }
 
+  async function extractVideoFrames(file: File, frameCount = 3) {
+    if (!file.type.toLowerCase().startsWith("video/")) return [];
+
+    const objectUrl = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.src = objectUrl;
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        if (video.readyState >= 1) {
+          resolve();
+          return;
+        }
+
+        const timeout = window.setTimeout(() => {
+          cleanup();
+          reject(new Error("The video could not be opened for visual analysis."));
+        }, 15000);
+
+        const cleanup = () => {
+          window.clearTimeout(timeout);
+          video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+          video.removeEventListener("error", handleError);
+        };
+
+        const handleLoadedMetadata = () => {
+          cleanup();
+          resolve();
+        };
+
+        const handleError = () => {
+          cleanup();
+          reject(new Error("The video format could not be decoded by this browser."));
+        };
+
+        video.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });
+        video.addEventListener("error", handleError, { once: true });
+      });
+
+      if (!Number.isFinite(video.duration) || video.duration <= 0) {
+        throw new Error("The video duration could not be read.");
+      }
+
+      if (!video.videoWidth || !video.videoHeight) {
+        throw new Error("The video has no readable visual track.");
+      }
+
+      const canvas = document.createElement("canvas");
+      const maxWidth = 1280;
+      const scale = Math.min(1, maxWidth / video.videoWidth);
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Could not prepare video frame extraction.");
+      }
+
+      const safeEnd = Math.max(0, video.duration - 0.05);
+      const ratios = frameCount === 1
+        ? [0.5]
+        : [0.1, 0.5, 0.9].slice(0, frameCount);
+
+      const frames: Array<{
+        file: File;
+        timestampMs: number;
+        index: number;
+      }> = [];
+
+      for (let index = 0; index < ratios.length; index += 1) {
+        const timestamp = Math.min(
+          safeEnd,
+          Math.max(0, safeEnd * ratios[index])
+        );
+
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const timeout = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error("The browser could not seek to a video frame."));
+          }, 10000);
+
+          const cleanup = () => {
+            window.clearTimeout(timeout);
+            video.removeEventListener("seeked", handleSeeked);
+            video.removeEventListener("error", handleError);
+          };
+
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve();
+          };
+
+          const handleSeeked = () => {
+            if (typeof video.requestVideoFrameCallback === "function") {
+              video.requestVideoFrameCallback(() => finish());
+            } else {
+              window.setTimeout(finish, 60);
+            }
+          };
+
+          const handleError = () => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(new Error("The browser could not decode this video frame."));
+          };
+
+          video.addEventListener("seeked", handleSeeked, { once: true });
+          video.addEventListener("error", handleError, { once: true });
+          video.currentTime = timestamp;
+        });
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.8)
+        );
+
+        if (!blob) {
+          throw new Error("Could not create a visual frame from the video.");
+        }
+
+        const baseName = file.name.replace(/\.[^/.]+$/, "") || "video";
+        frames.push({
+          file: new File(
+            [blob],
+            baseName + ".frame-" + String(index + 1).padStart(2, "0") + ".jpg",
+            { type: "image/jpeg", lastModified: Date.now() }
+          ),
+          timestampMs: Math.round(timestamp * 1000),
+          index: index + 1
+        });
+      }
+
+      return frames;
+    } finally {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
   async function uploadFileToStorage(
     file: File,
     userId: string,
     chatId: string,
     accessToken: string,
-    onProgress: (percentage: number) => void
+    onProgress: (percentage: number) => void,
+    options?: {
+      parentFileId?: string | null;
+      frameTimestampMs?: number | null;
+    }
   ) {
     const storagePath = createStoragePath(userId, chatId, file);
     const contentType = file.type || "application/octet-stream";
@@ -782,7 +938,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         storage_path: storagePath,
         mime_type: contentType,
         size_bytes: file.size,
-        status: "uploaded"
+        status: "uploaded",
+        parent_file_id: options?.parentFileId ?? null,
+        frame_timestamp_ms: options?.frameTimestampMs ?? null
       })
       .select("id,storage_path")
       .single();
@@ -2505,9 +2663,46 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           );
 
           uploadedFilesForPrompt.push(uploaded);
+
+          if (file.type.toLowerCase().startsWith("video/")) {
+            setFileUploadStatus(
+              "Preparing 3 visual frames for Aperonix: " + file.name
+            );
+            setFileUploadProgress(0);
+
+            const frames = await extractVideoFrames(file, 3);
+
+            for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
+              const frame = frames[frameIndex];
+
+              setFileUploadStatus(
+                "Uploading video frame " +
+                  (frameIndex + 1) +
+                  "/" +
+                  frames.length +
+                  ": " +
+                  file.name
+              );
+              setFileUploadProgress(0);
+
+              const uploadedFrame = await uploadFileToStorage(
+                frame.file,
+                user.id,
+                activeSession.id,
+                accessToken,
+                (percentage) => setFileUploadProgress(percentage),
+                {
+                  parentFileId: uploaded.id,
+                  frameTimestampMs: frame.timestampMs
+                }
+              );
+
+              uploadedFilesForPrompt.push(uploadedFrame);
+            }
+          }
         }
 
-        setFileUploadStatus("Files uploaded successfully.");
+        setFileUploadStatus("Files and video visual frames uploaded successfully.");
         setFileUploadProgress(100);
       }
 
