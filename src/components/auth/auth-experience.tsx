@@ -8,6 +8,8 @@ import Chat from "@/components/chat/chat";
 
 type Screen = "landing" | "choice" | "signup" | "signin" | "confirmation";
 
+let cachedAuthenticated: boolean | null = null;
+
 function screenForPath(pathname: string): Screen {
   if (pathname === "/signup") return "signup";
   if (pathname === "/signin") return "signin";
@@ -87,9 +89,8 @@ export default function AuthExperience() {
   const pathname = usePathname();
   const router = useRouter();
   const [screen, setScreen] = useState<Screen>(() => screenForPath(pathname));
-  const [sessionLoading, setSessionLoading] = useState(true);
-  const [showSessionSpinner, setShowSessionSpinner] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(() => cachedAuthenticated ?? false);
+  const [sessionLoading, setSessionLoading] = useState(() => cachedAuthenticated === null);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -122,19 +123,6 @@ export default function AuthExperience() {
   }, [pathname]);
 
   useEffect(() => {
-    if (!sessionLoading) {
-      setShowSessionSpinner(false);
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setShowSessionSpinner(true);
-    }, 2000);
-
-    return () => window.clearTimeout(timer);
-  }, [sessionLoading]);
-
-  useEffect(() => {
     if (sessionLoading) return;
 
     if (authenticated && isAuthPath(pathname)) {
@@ -155,9 +143,12 @@ export default function AuthExperience() {
 
       if (data.session?.user.is_anonymous) {
         await supabase.auth.signOut();
+        cachedAuthenticated = false;
         setAuthenticated(false);
       } else {
-        setAuthenticated(Boolean(data.session));
+        const nextAuthenticated = Boolean(data.session);
+        cachedAuthenticated = nextAuthenticated;
+        setAuthenticated(nextAuthenticated);
       }
 
       setSessionLoading(false);
@@ -165,7 +156,9 @@ export default function AuthExperience() {
 
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       const isRealAccount = Boolean(session && !session.user.is_anonymous);
+      cachedAuthenticated = isRealAccount;
       setAuthenticated(isRealAccount);
+      setSessionLoading(false);
 
       if (event === "SIGNED_IN" && isRealAccount) {
         router.replace("/chat");
@@ -256,7 +249,9 @@ export default function AuthExperience() {
 
     if (data.session && data.user) {
       await syncProfile(data.user);
+      cachedAuthenticated = true;
       setAuthenticated(true);
+      setSessionLoading(false);
       router.replace("/chat");
       return;
     }
@@ -287,7 +282,9 @@ export default function AuthExperience() {
 
     if (data.user) {
       await syncProfile(data.user);
+      cachedAuthenticated = true;
       setAuthenticated(true);
+      setSessionLoading(false);
       router.replace("/chat");
     }
   }
@@ -308,19 +305,19 @@ export default function AuthExperience() {
 
   async function signOut() {
     await supabase.auth.signOut();
+    cachedAuthenticated = false;
     setAuthenticated(false);
+    setSessionLoading(false);
     setScreen("landing");
     router.replace("/");
   }
 
-  if (sessionLoading) {
-    return showSessionSpinner ? (
+  if (sessionLoading && cachedAuthenticated === null) {
+    return (
       <main className="auth-loading">
         <img src="/aperonix-logo.png" alt="Aperonix AI" />
         <div className="auth-loading-ring" />
       </main>
-    ) : (
-      <main className="auth-loading" aria-hidden="true" />
     );
   }
 
