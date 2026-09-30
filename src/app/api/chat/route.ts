@@ -289,16 +289,25 @@ export async function POST(request: Request) {
     let attachmentContext = "";
 
     if (attachmentMessageIds.length > 0) {
-      const { data: attachmentRows, error: attachmentError } = await authClient
-        .from("aperonix_files")
-        .select(
-          "id,message_id,original_name,storage_path,mime_type,size_bytes,status"
+      const attachmentChatIds = Array.from(
+        new Set(
+          [requestedChatId, branchFromChatId].filter(
+            (id): id is string => typeof id === "string" && id.length > 0
+          )
         )
-        .eq("user_id", authData.user.id)
-        .eq("chat_id", requestedChatId || branchFromChatId || "")
-        .eq("status", "ready")
-        .in("message_id", attachmentMessageIds)
-        .order("created_at", { ascending: true });
+      );
+
+      if (attachmentChatIds.length > 0) {
+        const { data: attachmentRows, error: attachmentError } = await authClient
+          .from("aperonix_files")
+          .select(
+            "id,message_id,original_name,storage_path,mime_type,size_bytes,status"
+          )
+          .eq("user_id", authData.user.id)
+          .eq("status", "ready")
+          .in("chat_id", attachmentChatIds)
+          .in("message_id", attachmentMessageIds)
+          .order("created_at", { ascending: true });
 
       if (attachmentError) {
         console.error("Aperonix attachment lookup error:", attachmentError);
@@ -308,9 +317,10 @@ export async function POST(request: Request) {
         );
       }
 
-      if (attachmentRows && attachmentRows.length > 0) {
-        const { buildAttachmentContext } = await import("@/lib/ai/attachments");
-        attachmentContext = await buildAttachmentContext(authClient, attachmentRows);
+        if (attachmentRows && attachmentRows.length > 0) {
+          const { buildAttachmentContext } = await import("@/lib/ai/attachments");
+          attachmentContext = await buildAttachmentContext(authClient, attachmentRows);
+        }
       }
     }
 
