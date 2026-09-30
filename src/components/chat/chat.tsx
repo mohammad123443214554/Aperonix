@@ -2308,7 +2308,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }
 
   return (
-    <main className="chat-shell" onClick={() => {\n      if (openMenuId) setOpenMenuId(null);\n      if (isUploadMenuOpen) setIsUploadMenuOpen(false);\n    }}>
+    <main className="chat-shell" onClick={() => {
+      if (openMenuId) setOpenMenuId(null);
+      if (isUploadMenuOpen) setIsUploadMenuOpen(false);
+    }}>
       <aside className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-top">
           <div className="sidebar-brand">
