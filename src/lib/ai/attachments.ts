@@ -163,20 +163,6 @@ async function processDocxFile(attachment: AttachmentRow, url: string) {
   return limitText(result.value);
 }
 
-async function processAudioOrVideo(
-  attachment: AttachmentRow,
-  url: string
-) {
-  const transcription = await getGroqClient().audio.transcriptions.create({
-    model: TRANSCRIPTION_MODEL,
-    url,
-    response_format: "text",
-    temperature: 0
-  });
-
-  return limitText(transcription.text || "No speech was detected in this file.");
-}
-
 async function processImages(
   urls: string[],
   prompt: string
