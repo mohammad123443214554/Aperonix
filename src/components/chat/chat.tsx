@@ -20,7 +20,7 @@ import { Upload } from "tus-js-client";
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
-import type { ChatMessage, ChatSession, FeedbackType } from "@/types/chat";
+import type { ChatAttachment, ChatMessage, ChatSession, FeedbackType } from "@/types/chat";
 
 const welcomeMessage: ChatMessage = {
   role: "assistant",
@@ -457,6 +457,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           created_at: string;
         }> = [];
 
+        let attachmentRows: Array<{
+          id: string;
+          chat_id: string;
+          message_id: string | null;
+          original_name: string;
+          storage_path: string;
+          mime_type: string;
+          size_bytes: number;
+        }> = [];
+
         if (chatIds.length > 0) {
           const { data: rows, error: messagesError } = await supabase
             .from("chat_messages")
@@ -466,6 +476,52 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
           if (messagesError) throw messagesError;
           messageRows = rows ?? [];
+
+          const { data: files, error: filesError } = await supabase
+            .from("aperonix_files")
+            .select(
+              "id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes"
+            )
+            .in("chat_id", chatIds)
+            .eq("status", "ready")
+            .order("created_at", { ascending: true });
+
+          if (filesError) throw filesError;
+          attachmentRows = files ?? [];
+        }
+
+        const attachmentUrlEntries = await Promise.all(
+          attachmentRows.map(async (file) => {
+            const { data } = await supabase.storage
+              .from("aperonix-files")
+              .createSignedUrl(file.storage_path, 60 * 60);
+
+            return [
+              file.id,
+              data?.signedUrl ?? ""
+            ] as const;
+          })
+        );
+
+        const attachmentUrls = new Map(attachmentUrlEntries);
+
+        const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
+
+        for (const file of attachmentRows) {
+          if (!file.message_id) continue;
+
+          const attachment: ChatAttachment = {
+            id: file.id,
+            name: file.original_name,
+            sizeBytes: Number(file.size_bytes),
+            mimeType: file.mime_type,
+            storagePath: file.storage_path,
+            url: attachmentUrls.get(file.id) || undefined
+          };
+
+          const current = attachmentsByMessageId.get(file.message_id) ?? [];
+          current.push(attachment);
+          attachmentsByMessageId.set(file.message_id, current);
         }
 
         const loaded: ChatSession[] = (chats ?? []).map((chat) => ({
@@ -477,7 +533,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               id,
               role,
               content,
-              createdAt: new Date(created_at).getTime()
+              createdAt: new Date(created_at).getTime(),
+              attachments: attachmentsByMessageId.get(id) ?? []
             })),
           createdAt: new Date(chat.created_at).getTime(),
           updatedAt: new Date(chat.updated_at).getTime(),
