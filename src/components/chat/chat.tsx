@@ -2276,7 +2276,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     const content = input.trim();
 
-    if ((!content && selectedFiles.length === 0) || isLoading || !activeSession) return;
+    if (!content || isLoading || !activeSession) return;
 
     if (editingMessageId && selectedFiles.length > 0) {
       setFileSelectionError("Remove attached files before editing this message.");
