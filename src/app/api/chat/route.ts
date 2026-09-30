@@ -154,17 +154,38 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       messages?: ChatMessage[];
-      aperonixSetting?: string;
       branchFromChatId?: string | null;
       branchFromMessageId?: string | null;
       chatId?: string;
       generateTitle?: boolean;
     };
     const messages = Array.isArray(body.messages) ? body.messages : [];
-    const requestAperonixSetting =
-      typeof body.aperonixSetting === "string"
-        ? body.aperonixSetting.slice(0, 4000).trim()
-        : "";
+    const requestedChatId =
+      typeof body.chatId === "string" ? body.chatId.trim() : "";
+
+    if (requestedChatId) {
+      const { data: ownedChat, error: ownedChatError } = await authClient
+        .from("chat_sessions")
+        .select("id")
+        .eq("id", requestedChatId)
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (ownedChatError) {
+        console.error("Chat ownership lookup error:", ownedChatError);
+        return NextResponse.json(
+          { error: "Could not verify this chat." },
+          { status: 500 }
+        );
+      }
+
+      if (!ownedChat) {
+        return NextResponse.json(
+          { error: "This chat is not available." },
+          { status: 404 }
+        );
+      }
+    }
 
     const sanitizedMessages = messages
       .filter(
@@ -272,11 +293,9 @@ export async function POST(request: Request) {
         ? profileData.aperonix_setting.slice(0, 4000).trim()
         : "";
 
-    // The saved profile value is the source of truth. The client value is
-    // a fallback for environments where the profile read is temporarily
-    // blocked by an RLS/schema issue; it is still bounded and cannot
-    // override the protected system prompt.
-    const aperonixSetting = storedAperonixSetting || requestAperonixSetting;
+    // The saved profile value is the only source of personalization.
+    // Never trust a client-provided persona/settings value for AI behavior.
+    const aperonixSetting = storedAperonixSetting;
 
     const completion = await getGroqClient().chat.completions.create({
       model: GROQ_MODEL,
@@ -290,8 +309,7 @@ export async function POST(request: Request) {
 
     const shouldGenerateTitle =
       body.generateTitle === true &&
-      typeof body.chatId === "string" &&
-      body.chatId.trim().length > 0 &&
+      requestedChatId.length > 0 &&
       sanitizedMessages.length === 1 &&
       sanitizedMessages[0].role === "user";
 
@@ -301,7 +319,7 @@ export async function POST(request: Request) {
           content,
           authClient,
           authData.user.id,
-          body.chatId?.trim() || ""
+          requestedChatId
         )
       : null;
 
