@@ -424,7 +424,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         const { data: chats, error: chatsError } = await supabase
           .from("chat_sessions")
-          .select("id,title,created_at,updated_at,is_pinned")
+          .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
           .eq("user_id", user.id)
           .order("is_pinned", { ascending: false })
           .order("updated_at", { ascending: false });
@@ -464,7 +464,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             })),
           createdAt: new Date(chat.created_at).getTime(),
           updatedAt: new Date(chat.updated_at).getTime(),
-          isPinned: Boolean(chat.is_pinned)
+          isPinned: Boolean(chat.is_pinned),
+          branchFromChatId: chat.branch_from_chat_id ?? null,
+          branchFromMessageId: chat.branch_from_message_id ?? null
         }));
 
         if (!mounted) return;
@@ -500,7 +502,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           const { data: created, error: createError } = await supabase
             .from("chat_sessions")
             .insert({ user_id: user.id, title: "New chat" })
-            .select("id,title,created_at,updated_at,is_pinned")
+            .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
             .single();
 
           if (createError) throw createError;
@@ -511,7 +513,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             messages: [],
             createdAt: new Date(created.created_at).getTime(),
             updatedAt: new Date(created.updated_at).getTime(),
-            isPinned: Boolean(created.is_pinned)
+            isPinned: Boolean(created.is_pinned),
+            branchFromChatId: created.branch_from_chat_id ?? null,
+            branchFromMessageId: created.branch_from_message_id ?? null
           };
 
           setSessions([initial]);
@@ -599,7 +603,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       const { data, error } = await supabase
         .from("chat_sessions")
         .insert({ user_id: user.id, title: "New chat" })
-        .select("id,title,created_at,updated_at,is_pinned")
+        .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
         .single();
 
       if (error) throw error;
@@ -610,7 +614,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         messages: [],
         createdAt: new Date(data.created_at).getTime(),
         updatedAt: new Date(data.updated_at).getTime(),
-        isPinned: Boolean(data.is_pinned)
+        isPinned: Boolean(data.is_pinned),
+        branchFromChatId: data.branch_from_chat_id ?? null,
+        branchFromMessageId: data.branch_from_message_id ?? null
       };
 
       setSessions((current) => sortSessions([...current, next]));
@@ -743,9 +749,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         .insert({
           user_id: user.id,
           title,
-          is_pinned: false
+          is_pinned: false,
+          branch_from_chat_id: session.branchFromChatId ?? null,
+          branch_from_message_id: session.branchFromMessageId ?? null
         })
-        .select("id,title,created_at,updated_at,is_pinned")
+        .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
         .single();
 
       if (chatError) throw chatError;
@@ -789,7 +797,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         messages: duplicatedMessages,
         createdAt: new Date(copy.created_at).getTime(),
         updatedAt: new Date(copy.updated_at).getTime(),
-        isPinned: false
+        isPinned: false,
+        branchFromChatId: copy.branch_from_chat_id ?? null,
+        branchFromMessageId: copy.branch_from_message_id ?? null
       };
 
       setSessions((current) => sortSessions([duplicate, ...current]));
