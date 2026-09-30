@@ -2538,6 +2538,15 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         if (attachmentLinkError) throw attachmentLinkError;
       }
 
+      const messageAttachments: ChatAttachment[] = selectedFiles.map((file, index) => ({
+        id: uploadedFilesForPrompt[index]?.id ?? crypto.randomUUID(),
+        name: file.name,
+        sizeBytes: file.size,
+        mimeType: file.type || "application/octet-stream",
+        storagePath: uploadedFilesForPrompt[index]?.storagePath ?? "",
+        url: URL.createObjectURL(file)
+      }));
+
       attachmentsCommitted = true;
       setSelectedFiles([]);
       setFileSelectionError("");
@@ -2550,7 +2559,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           id: savedUserMessage.id,
           role: "user",
           content,
-          createdAt: new Date(savedUserMessage.created_at).getTime()
+          createdAt: new Date(savedUserMessage.created_at).getTime(),
+          attachments: messageAttachments
         }
       ];
 
