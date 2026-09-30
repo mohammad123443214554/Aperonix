@@ -307,7 +307,7 @@ export async function POST(request: Request) {
         const { data: attachmentRows, error: attachmentError } = await authClient
           .from("aperonix_files")
           .select(
-            "id,message_id,original_name,storage_path,mime_type,size_bytes,status"
+            "id,message_id,parent_file_id,frame_timestamp_ms,original_name,storage_path,mime_type,size_bytes,status"
           )
           .eq("user_id", authData.user.id)
           .eq("status", "ready")
@@ -321,17 +321,49 @@ export async function POST(request: Request) {
           .order("created_at", { ascending: false })
           .limit(5);
 
-      if (attachmentError) {
-        console.error("Aperonix attachment lookup error:", attachmentError);
-        return NextResponse.json(
-          { error: "Could not load the attached files." },
-          { status: 500 }
-        );
-      }
+        if (attachmentError) {
+          console.error("Aperonix attachment lookup error:", attachmentError);
+          return NextResponse.json(
+            { error: "Could not load the attached files." },
+            { status: 500 }
+          );
+        }
 
-        if (attachmentRows && attachmentRows.length > 0) {
+        let allAttachmentRows = attachmentRows ?? [];
+
+        const originalAttachmentIds = allAttachmentRows
+          .filter((attachment) => !attachment.parent_file_id)
+          .map((attachment) => attachment.id);
+
+        if (originalAttachmentIds.length > 0) {
+          const { data: frameRows, error: frameError } = await authClient
+            .from("aperonix_files")
+            .select(
+              "id,message_id,parent_file_id,frame_timestamp_ms,original_name,storage_path,mime_type,size_bytes,status"
+            )
+            .eq("user_id", authData.user.id)
+            .eq("status", "ready")
+            .in("parent_file_id", originalAttachmentIds)
+            .order("frame_timestamp_ms", { ascending: true })
+            .limit(15);
+
+          if (frameError) {
+            console.error("Aperonix video frame lookup error:", frameError);
+            return NextResponse.json(
+              { error: "Could not load the visual frames for the attached video." },
+              { status: 500 }
+            );
+          }
+
+          allAttachmentRows = [...allAttachmentRows, ...(frameRows ?? [])];
+        }
+
+        if (allAttachmentRows.length > 0) {
           const { buildAttachmentContext } = await import("@/lib/ai/attachments");
-          attachmentContext = await buildAttachmentContext(authClient, attachmentRows);
+          attachmentContext = await buildAttachmentContext(
+            authClient,
+            allAttachmentRows
+          );
         }
       }
     }
