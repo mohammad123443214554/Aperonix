@@ -15,7 +15,7 @@ import {
 } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter } from "next/navigation";
+
 
 import { COUNTRY_CALLING_CODES } from "@/lib/countries";
 import { supabase } from "@/lib/supabase/client";
@@ -250,10 +250,25 @@ async function ensureAuthenticatedUser() {
 }
 
 export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) {
-  const pathname = usePathname();
-  const router = useRouter();
+  const [pathname, setPathname] = useState(() =>
+    typeof window !== "undefined" ? window.location.pathname : "/chat"
+  );
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+  function navigate(path: string, replace = false) {
+    if (typeof window === "undefined") return;
+
+    if (replace) {
+      window.history.replaceState({}, "", path);
+    } else {
+      window.history.pushState({}, "", path);
+    }
+
+    setPathname(path);
+  }
+
+
   const [activeSessionId, setActiveSessionId] = useState("");
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -320,6 +335,18 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const readAloudUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const readAloudGenerationRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setPathname(window.location.pathname);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     stopReadAloud();
@@ -517,7 +544,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       } else {
         const fallback = sessions[0];
         setActiveSessionId(fallback.id);
-        router.replace(`/chat/${fallback.id}`);
+        navigate(`/chat/${fallback.id}`);
       }
     } else if (pathname === "/chat") {
       setActiveSessionId((current) =>
@@ -557,7 +584,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setActiveSessionId(id);
     setOpenMenuId(null);
     setIsSidebarOpen(false);
-    router.push(`/chat/${id}`);
+    navigate(`/chat/${id}`);
   }
 
   async function handleNewChat() {
@@ -585,7 +612,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setSessions((current) => sortSessions([...current, next]));
       setActiveSessionId(next.id);
-      router.push(`/chat/${next.id}`);
+      navigate(`/chat/${next.id}`);
     } catch (error) {
       console.error("New chat error:", error);
     }
@@ -623,7 +650,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     if (session.id === activeSessionId) {
       if (remaining.length > 0) {
         setActiveSessionId(remaining[0].id);
-        router.push(`/chat/${remaining[0].id}`);
+        navigate(`/chat/${remaining[0].id}`);
       } else {
         await handleNewChat();
       }
@@ -764,7 +791,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setSessions((current) => sortSessions([duplicate, ...current]));
       setActiveSessionId(duplicate.id);
-      router.push(`/chat/${duplicate.id}`);
+      navigate(`/chat/${duplicate.id}`);
     } catch (error) {
       console.error("Duplicate chat error:", error);
     }
@@ -828,7 +855,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileDraft(nextProfile);
     setProfileSaving(false);
     setProfileEditOpen(false);
-    router.push("/profile");
+    navigate("/profile");
   }
 
   async function deleteAccount() {
@@ -878,7 +905,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileOpen(false);
     setProfileDetailsOpen(true);
     setProfileEditOpen(false);
-    router.push("/profile");
+    navigate("/profile");
   }
 
   function openProfileEditor() {
@@ -886,7 +913,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileEditOpen(true);
     setProfileOpen(false);
     setProfileDetailsOpen(false);
-    router.push("/profile/edit");
+    navigate("/profile/edit");
   }
 
 
@@ -897,7 +924,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setProfileOpen(false);
     setProfileDetailsOpen(false);
     setProfileEditOpen(false);
-    router.push("/settings");
+    navigate("/settings");
   }
 
   function openAperonixSetting() {
@@ -905,14 +932,14 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setSettingsError("");
     setAperonixSettingOpen(true);
     setDangerZoneOpen(false);
-    router.push("/settings/aperonix");
+    navigate("/settings/aperonix");
   }
 
   function openDangerZone() {
     setDangerZoneOpen(true);
     setAperonixSettingOpen(false);
     setSettingsError("");
-    router.push("/settings/danger-zone");
+    navigate("/settings/danger-zone");
   }
 
   async function saveAperonixSetting() {
@@ -941,7 +968,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       setSettingsDraft(cleaned);
       setAperonixSettingOpen(false);
       setSettingsOpen(true);
-      router.replace("/settings");
+      navigate("/settings");
     } catch (error) {
       console.error("Aperonix setting save error:", error);
       setSettingsError(
@@ -2112,7 +2139,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               </div>
             </div>
             <button type="button" onClick={openProfileDetails}>Account</button>
-            <button type="button" onClick={openProfileEditor}>Edit profile</button>
             <button type="button" onClick={openSettings}>Settings</button>
             <button type="button" onClick={() => void onSignOut()} disabled={isLoading}>Sign out</button>
           </div>
@@ -2366,7 +2392,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           <div className="account-page-header">
             <button type="button" className="account-page-back" onClick={() => {
                 setProfileDetailsOpen(false);
-                router.push("/chat");
+                navigate("/chat");
               }}>
               <span>←</span> Back
             </button>
@@ -2424,10 +2450,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   setDangerZoneOpen(false);
                   setSettingsError("");
                   setSettingsDraft(aperonixSetting);
-                  router.push("/settings");
+                  navigate("/settings");
                 } else {
                   setSettingsOpen(false);
-                  router.push("/chat");
+                  navigate("/chat");
                 }
               }}
               disabled={settingsSaving}
@@ -2579,7 +2605,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           <div className="account-page-header">
             <button type="button" className="account-page-back" onClick={() => {
               setProfileEditOpen(false);
-              router.push("/profile");
+              navigate("/profile");
             }}>
               <span>←</span> Back
             </button>
@@ -2852,7 +2878,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 setAccountDeleteOpen(false);
                 setAccountDeleteText("");
                 setAccountDeleteError("");
-                router.push("/settings/danger-zone");
+                navigate("/settings/danger-zone");
               }} disabled={accountDeleting}>Cancel</button>
               <button
                 type="button"
