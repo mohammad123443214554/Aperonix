@@ -276,6 +276,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pinFlashId, setPinFlashId] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [feedbackByMessageId, setFeedbackByMessageId] = useState<Record<string, FeedbackType>>({});
   const [shareModal, setShareModal] = useState<{
     url: string | null;
@@ -1745,6 +1746,70 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  function startEditingUserMessage(message: ChatMessage) {
+    if (isLoading || message.role !== "user" || !message.id) return;
+
+    stopReadAloud();
+    setOpenMenuId(null);
+    setShareModal(null);
+    setEditingMessageId(message.id);
+    setInput(message.content);
+    window.setTimeout(() => {
+      document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+    }, 0);
+  }
+
+  function cancelEditingUserMessage() {
+    if (isLoading) return;
+    setEditingMessageId(null);
+    setInput("");
+  }
+
+  async function deleteMessagesAfterIndex(
+    session: ChatSession,
+    keepThroughIndex: number,
+    userId: string
+  ) {
+    const removedMessages = session.messages.slice(keepThroughIndex + 1);
+    const removedMessageIds = removedMessages
+      .map((message) => message.id)
+      .filter((id): id is string => Boolean(id));
+    const removedAssistantIds = removedMessages
+      .filter((message) => message.role === "assistant")
+      .map((message) => message.id)
+      .filter((id): id is string => Boolean(id));
+
+    if (removedAssistantIds.length > 0) {
+      const { error: feedbackDeleteError } = await supabase
+        .from("message_feedback")
+        .delete()
+        .eq("user_id", userId)
+        .in("message_id", removedAssistantIds);
+
+      if (feedbackDeleteError) {
+        console.error("Delete removed feedback error:", feedbackDeleteError);
+      }
+
+      setFeedbackByMessageId((state) => {
+        const next = { ...state };
+        for (const id of removedAssistantIds) {
+          delete next[id];
+        }
+        return next;
+      });
+    }
+
+    if (removedMessageIds.length === 0) return;
+
+    const { error: messageDeleteError } = await supabase
+      .from("chat_messages")
+      .delete()
+      .eq("chat_id", session.id)
+      .in("id", removedMessageIds);
+
+    if (messageDeleteError) throw messageDeleteError;
+  }
+
   async function retryMessage(messageIndex: number) {
     if (isLoading || !activeSession) return;
 
@@ -1795,6 +1860,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       const nextContent = data.message?.content || "I could not generate a response.";
 
+      await deleteMessagesAfterIndex(activeSession, messageIndex, user.id);
+
       if (assistant.id) {
         await supabase
           .from("message_feedback")
@@ -1807,9 +1874,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           delete next[assistant.id as string];
           return next;
         });
-      }
 
-      if (assistant.id) {
         const { error: updateError } = await supabase
           .from("chat_messages")
           .update({ content: nextContent })
@@ -1834,16 +1899,17 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         assistant.createdAt = new Date(inserted.created_at).getTime();
       }
 
+      const nextMessages = [
+        ...activeSession.messages.slice(0, messageIndex),
+        { ...assistant, content: nextContent }
+      ];
+
       setSessions((current) =>
         current.map((session) =>
           session.id === activeSession.id
             ? {
                 ...session,
-                messages: session.messages.map((item, index) =>
-                  index === messageIndex
-                    ? { ...item, content: nextContent }
-                    : item
-                ),
+                messages: nextMessages,
                 updatedAt: Date.now()
               }
             : session
@@ -1856,6 +1922,286 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         .eq("id", activeSession.id);
     } catch (error) {
       console.error("Retry message error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const content = input.trim();
+    if (!content || isLoading || !activeSession) return;
+
+    stopReadAloud();
+    setIsLoading(true);
+
+    try {
+      const user = await ensureAuthenticatedUser();
+
+      let { data: sessionData } = await supabase.auth.getSession();
+
+      if (!sessionData.session) {
+        const refreshed = await supabase.auth.refreshSession();
+        sessionData = refreshed.data;
+      }
+
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error("Your session has expired. Please sign in again.");
+      }
+
+      if (editingMessageId) {
+        const editingIndex = activeSession.messages.findIndex(
+          (message) => message.id === editingMessageId
+        );
+        const originalMessage = editingIndex >= 0
+          ? activeSession.messages[editingIndex]
+          : null;
+
+        if (
+          editingIndex < 0 ||
+          !originalMessage ||
+          originalMessage.role !== "user" ||
+          !originalMessage.id
+        ) {
+          setEditingMessageId(null);
+          setInput("");
+          return;
+        }
+
+        const editedMessages: ChatMessage[] = [
+          ...activeSession.messages.slice(0, editingIndex),
+          {
+            ...originalMessage,
+            content
+          }
+        ];
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            messages: editedMessages,
+            aperonixSetting,
+            branchFromChatId: activeSession.branchFromChatId ?? null,
+            branchFromMessageId: activeSession.branchFromMessageId ?? null
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not resend the edited message.");
+        }
+
+        const nextContent =
+          data.message?.content || "I could not generate a response.";
+
+        await deleteMessagesAfterIndex(activeSession, editingIndex, user.id);
+
+        const { error: updateError } = await supabase
+          .from("chat_messages")
+          .update({ content })
+          .eq("id", originalMessage.id);
+
+        if (updateError) throw updateError;
+
+        const assistantMessage: ChatMessage = {
+          role: "assistant",
+          content: nextContent
+        };
+
+        const { data: savedAssistantMessage, error: assistantSaveError } =
+          await supabase
+            .from("chat_messages")
+            .insert({
+              chat_id: activeSession.id,
+              user_id: user.id,
+              role: "assistant",
+              content: assistantMessage.content
+            })
+            .select("id,created_at")
+            .single();
+
+        if (assistantSaveError) throw assistantSaveError;
+
+        assistantMessage.id = savedAssistantMessage.id;
+        assistantMessage.createdAt = new Date(
+          savedAssistantMessage.created_at
+        ).getTime();
+
+        const shouldUpdateTitle =
+          editingIndex === 0 &&
+          (activeSession.title === "New chat" ||
+            activeSession.title === makeTitle(originalMessage.content));
+
+        const newTitle = shouldUpdateTitle
+          ? makeTitle(content)
+          : activeSession.title;
+
+        await supabase
+          .from("chat_sessions")
+          .update({
+            title: newTitle,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", activeSession.id);
+
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === activeSession.id
+              ? {
+                  ...session,
+                  title: newTitle,
+                  messages: [...editedMessages, assistantMessage],
+                  updatedAt: Date.now()
+                }
+              : session
+          )
+        );
+
+        setEditingMessageId(null);
+        setInput("");
+        return;
+      }
+
+      setInput("");
+
+      const { data: savedUserMessage, error: messageError } = await supabase
+        .from("chat_messages")
+        .insert({
+          chat_id: activeSession.id,
+          user_id: user.id,
+          role: "user",
+          content
+        })
+        .select("id,created_at")
+        .single();
+
+      if (messageError) throw messageError;
+
+      const nextMessages: ChatMessage[] = [
+        ...activeSession.messages,
+        {
+          id: savedUserMessage.id,
+          role: "user",
+          content,
+          createdAt: new Date(savedUserMessage.created_at).getTime()
+        }
+      ];
+
+      const newTitle =
+        activeSession.title === "New chat"
+          ? makeTitle(content)
+          : activeSession.title;
+
+      await supabase
+        .from("chat_sessions")
+        .update({
+          title: newTitle,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", activeSession.id);
+
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === activeSession.id
+            ? {
+                ...session,
+                title: newTitle,
+                messages: nextMessages,
+                updatedAt: Date.now()
+              }
+            : session
+        )
+      );
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          messages: nextMessages,
+          aperonixSetting,
+          branchFromChatId: activeSession.branchFromChatId ?? null,
+          branchFromMessageId: activeSession.branchFromMessageId ?? null
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Something went wrong.");
+      }
+
+      const assistantMessage: ChatMessage = {
+        role: "assistant",
+        content: data.message?.content || "I could not generate a response."
+      };
+
+      const { data: savedAssistantMessage, error: assistantSaveError } = await supabase
+        .from("chat_messages")
+        .insert({
+          chat_id: activeSession.id,
+          user_id: user.id,
+          role: "assistant",
+          content: assistantMessage.content
+        })
+        .select("id,created_at")
+        .single();
+
+      if (assistantSaveError) throw assistantSaveError;
+
+      assistantMessage.id = savedAssistantMessage.id;
+      assistantMessage.createdAt = new Date(savedAssistantMessage.created_at).getTime();
+
+      await supabase
+        .from("chat_sessions")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", activeSession.id);
+
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === activeSession.id
+            ? {
+                ...session,
+                messages: [...session.messages, assistantMessage],
+                updatedAt: Date.now()
+              }
+            : session
+        )
+      );
+    } catch (error) {
+      console.error("Aperonix chat error:", error);
+
+      if (editingMessageId) {
+        setInput(content);
+        return;
+      }
+
+      setSessions((current) =>
+        current.map((session) =>
+          session.id === activeSession.id
+            ? {
+                ...session,
+                messages: [
+                  ...session.messages,
+                  {
+                    role: "assistant",
+                    content: "Sorry, something went wrong. Please try again."
+                  }
+                ],
+                updatedAt: Date.now()
+              }
+            : session
+        )
+      );
     } finally {
       setIsLoading(false);
     }
@@ -2455,8 +2801,26 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                     </div>
                   </div>
                 ) : (
-                  <div className="user-bubble">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
+                  <div className="user-message-content">
+                    <div className="user-bubble">
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                    </div>
+
+                    <div className="message-actions user-message-actions" aria-label="Message actions">
+                      <button
+                        type="button"
+                        className="message-action-button edit-message-button"
+                        onClick={() => startEditingUserMessage(message)}
+                        disabled={isLoading || !message.id}
+                        aria-label="Edit message"
+                        title="Edit message"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="m4.5 19.5 1.1-4.1L15.7 5.3a2.3 2.3 0 0 1 3.2 3.2l-10 10-4.4 1Z" />
+                          <path d="m14.6 6.4 3.1 3.1" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 )}
               </article>
@@ -2482,11 +2846,24 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         </section>
 
         <div className="composer-wrap">
+          {editingMessageId && (
+            <div className="composer-editing-bar" role="status">
+              <span>Editing message</span>
+              <button
+                type="button"
+                onClick={cancelEditingUserMessage}
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           <form className="composer" onSubmit={handleSubmit}>
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Message Aperonix AI..."
+              placeholder={editingMessageId ? "Edit your message..." : "Message Aperonix AI..."}
               rows={1}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
@@ -2504,7 +2881,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 type="submit"
                 className="send-button"
                 disabled={!canSend}
-                aria-label="Send message"
+                aria-label={editingMessageId ? "Save edited message and resend" : "Send message"}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M20.4 3.7 4.1 10.2c-.7.3-.7 1.3 0 1.6l6.2 2.3 2.3 6.2c.3.7 1.3.7 1.6 0l6.5-16.3c.3-.8-.1-1.1-.3-1.1Z" />
