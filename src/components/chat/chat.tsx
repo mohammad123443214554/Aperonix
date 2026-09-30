@@ -551,7 +551,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         sessions.some((session) => session.id === current) ? current : sessions[0].id
       );
     }
-  }, [pathname, router, sessions]);
+  }, [pathname, sessions]);
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
