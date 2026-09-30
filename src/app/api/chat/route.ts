@@ -158,10 +158,16 @@ export async function POST(request: Request) {
       branchFromMessageId?: string | null;
       chatId?: string;
       generateTitle?: boolean;
+      attachmentIds?: string[];
     };
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const requestedChatId =
       typeof body.chatId === "string" ? body.chatId.trim() : "";
+    const requestedAttachmentIds = Array.isArray(body.attachmentIds)
+      ? body.attachmentIds.filter(
+          (id): id is string => typeof id === "string" && id.length > 0
+        ).slice(0, 5)
+      : [];
 
     if (requestedChatId) {
       const { data: ownedChat, error: ownedChatError } = await authClient
@@ -306,7 +312,12 @@ export async function POST(request: Request) {
           .eq("user_id", authData.user.id)
           .eq("status", "ready")
           .in("chat_id", attachmentChatIds)
-          .in("message_id", attachmentMessageIds)
+          .in(
+            requestedAttachmentIds.length > 0 ? "id" : "message_id",
+            requestedAttachmentIds.length > 0
+              ? requestedAttachmentIds
+              : attachmentMessageIds
+          )
           .order("created_at", { ascending: false })
           .limit(5);
 
