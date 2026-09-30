@@ -2741,12 +2741,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         }
 
         setFileUploadStatus("Files uploaded successfully.");
-        if (
-          selectedFiles.some((file) => file.type.toLowerCase().startsWith("video/")) &&
-          !uploadedOriginalFilesForPrompt.every(() => true)
-        ) {
-          // Kept intentionally empty; upload capability is tracked per file.
-        }
         setFileUploadProgress(100);
       }
 
