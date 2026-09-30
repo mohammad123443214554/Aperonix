@@ -334,6 +334,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [readAloudWordIndex, setReadAloudWordIndex] = useState<number | null>(null);
   const readAloudUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const readAloudGenerationRef = useRef(0);
+  const readAloudHighlightTimerRef = useRef<number | null>(null);
+  const readAloudBoundaryWordRef = useRef<number | null>(null);
+  const readAloudBoundaryTimeRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1237,54 +1240,33 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     return Math.max(0, (words?.length ?? 1) - 1);
   }
 
-  function buildSpeechSegments(text: string) {
-    const tokens = text.match(/\S+(?:\s+|$)/g) ?? [];
-    const segments: Array<{
+  function buildSpeechChunks(text: string) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const chunks: Array<{
       text: string;
-      languageCode: "hi-IN" | "en-IN";
       wordOffset: number;
+      languageCode: "hi-IN" | "en-IN";
     }> = [];
 
-    let currentLanguage: "hi-IN" | "en-IN" = "en-IN";
-    let currentText = "";
-    let wordOffset = 0;
-    let currentWordOffset = 0;
+    if (words.length === 0) return chunks;
 
-    for (const token of tokens) {
-      const trimmed = token.trim();
-      const letter = trimmed.match(/\p{L}/u)?.[0];
-      const tokenLanguage: "hi-IN" | "en-IN" =
-        letter && /[\u0900-\u097F]/u.test(letter) ? "hi-IN" : currentLanguage;
+    // A Hindi response or a Hinglish response stays on the Hindi voice.
+    // Only responses without Devanagari use the English voice.
+    const languageCode: "hi-IN" | "en-IN" =
+      /[\u0900-\u097F]/u.test(text) ? "hi-IN" : "en-IN";
 
-      if (!currentText) {
-        currentLanguage = tokenLanguage;
-        currentWordOffset = wordOffset;
-      }
+    const WORDS_PER_CHUNK = 170;
 
-      if (tokenLanguage !== currentLanguage && currentText.trim()) {
-        segments.push({
-          text: currentText.trim(),
-          languageCode: currentLanguage,
-          wordOffset: currentWordOffset
-        });
-        currentText = "";
-        currentLanguage = tokenLanguage;
-        currentWordOffset = wordOffset;
-      }
-
-      currentText += token;
-      wordOffset += 1;
-    }
-
-    if (currentText.trim()) {
-      segments.push({
-        text: currentText.trim(),
-        languageCode: currentLanguage,
-        wordOffset: currentWordOffset
+    for (let offset = 0; offset < words.length; offset += WORDS_PER_CHUNK) {
+      const chunkWords = words.slice(offset, offset + WORDS_PER_CHUNK);
+      chunks.push({
+        text: chunkWords.join(" "),
+        wordOffset: offset,
+        languageCode
       });
     }
 
-    return segments;
+    return chunks;
   }
 
   function pickHindiVoice(voices: SpeechSynthesisVoice[]) {
@@ -1338,6 +1320,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       window.speechSynthesis.cancel();
     }
 
+    if (
+      typeof window !== "undefined" &&
+      readAloudHighlightTimerRef.current !== null
+    ) {
+      window.clearInterval(readAloudHighlightTimerRef.current);
+      readAloudHighlightTimerRef.current = null;
+    }
+
+    readAloudBoundaryWordRef.current = null;
+    readAloudBoundaryTimeRef.current = 0;
     readAloudUtteranceRef.current = null;
     setReadAloudMessageKey(null);
     setReadAloudStatus("idle");
@@ -1361,47 +1353,87 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     const generation = readAloudGenerationRef.current + 1;
     readAloudGenerationRef.current = generation;
     const messageKey = messageReadAloudKey(message, index);
-    const segments = buildSpeechSegments(text);
+    const chunks = buildSpeechChunks(text);
 
-    if (segments.length === 0) return;
+    if (chunks.length === 0) return;
 
     setReadAloudMessageKey(messageKey);
     setReadAloudStatus("loading");
     setReadAloudWordIndex(null);
 
     let started = false;
-    let segmentIndex = 0;
+    let chunkIndex = 0;
 
-    const speakCurrentSegment = (voices: SpeechSynthesisVoice[]) => {
+    const speakCurrentChunk = (voices: SpeechSynthesisVoice[]) => {
       if (started || generation !== readAloudGenerationRef.current) return;
       started = true;
 
-      const speakSegment = () => {
+      const speakChunk = () => {
         if (generation !== readAloudGenerationRef.current) return;
 
-        const segment = segments[segmentIndex];
-        if (!segment) {
+        const chunk = chunks[chunkIndex];
+        if (!chunk) {
           finishReadAloud(generation);
           return;
         }
 
-        const utterance = new SpeechSynthesisUtterance(segment.text);
+        const utterance = new SpeechSynthesisUtterance(chunk.text);
         const voice =
-          segment.languageCode === "hi-IN"
+          chunk.languageCode === "hi-IN"
             ? pickHindiVoice(voices)
             : pickEnglishVoice(voices);
 
         if (voice) utterance.voice = voice;
 
-        utterance.lang = segment.languageCode;
+        utterance.lang = chunk.languageCode;
         utterance.rate = 0.94;
-        utterance.pitch = 1.03;
+        utterance.pitch = chunk.languageCode === "hi-IN" ? 1.02 : 1.03;
         utterance.volume = 1;
 
-        utterance.onstart = () => {
-          if (generation === readAloudGenerationRef.current) {
-            setReadAloudStatus("speaking");
+        const chunkWords = chunk.text.split(/\s+/).filter(Boolean);
+
+        const clearHighlightTimer = () => {
+          if (readAloudHighlightTimerRef.current !== null) {
+            window.clearInterval(readAloudHighlightTimerRef.current);
+            readAloudHighlightTimerRef.current = null;
           }
+        };
+
+        const startHighlightFallback = () => {
+          clearHighlightTimer();
+          readAloudBoundaryWordRef.current = null;
+          readAloudBoundaryTimeRef.current = performance.now();
+
+          // SpeechSynthesis word-boundary events are inconsistent across
+          // browser/OS voice engines, especially for Hindi. This fallback
+          // keeps Hindi highlighting moving and is resynchronised whenever
+          // a native boundary event arrives.
+          const approximateWordMs =
+            chunk.languageCode === "hi-IN" ? 290 : 250;
+
+          readAloudHighlightTimerRef.current = window.setInterval(() => {
+            if (generation !== readAloudGenerationRef.current) {
+              clearHighlightTimer();
+              return;
+            }
+
+            const elapsed = performance.now() - readAloudBoundaryTimeRef.current;
+            const baseWord = readAloudBoundaryWordRef.current ?? -1;
+            const estimatedAdvance = Math.floor(elapsed / approximateWordMs);
+            const localIndex = Math.min(
+              chunkWords.length - 1,
+              Math.max(0, baseWord + estimatedAdvance)
+            );
+
+            setReadAloudWordIndex(chunk.wordOffset + localIndex);
+          }, 90);
+        };
+
+        utterance.onstart = () => {
+          if (generation !== readAloudGenerationRef.current) return;
+          setReadAloudStatus("speaking");
+          setReadAloudWordIndex(chunk.wordOffset);
+          startHighlightFallback();
         };
 
         utterance.onboundary = (event) => {
@@ -1409,23 +1441,30 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           if (event.name && event.name !== "word") return;
 
           const localIndex = wordIndexAtCharacter(
-            segment.text,
+            chunk.text,
             event.charIndex ?? 0
           );
 
-          setReadAloudWordIndex(segment.wordOffset + localIndex);
+          readAloudBoundaryWordRef.current = Math.max(0, localIndex);
+          readAloudBoundaryTimeRef.current = performance.now();
+          setReadAloudWordIndex(chunk.wordOffset + localIndex);
         };
 
         utterance.onend = () => {
           if (generation !== readAloudGenerationRef.current) return;
 
+          clearHighlightTimer();
           readAloudUtteranceRef.current = null;
-          segmentIndex += 1;
-          speakSegment();
+          readAloudBoundaryWordRef.current = null;
+          readAloudBoundaryTimeRef.current = 0;
+          chunkIndex += 1;
+          speakChunk();
         };
 
         utterance.onerror = () => {
           if (generation !== readAloudGenerationRef.current) return;
+
+          clearHighlightTimer();
           finishReadAloud(generation);
         };
 
@@ -1433,29 +1472,38 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         window.speechSynthesis.speak(utterance);
       };
 
-      speakSegment();
+      speakChunk();
     };
 
     const voices = window.speechSynthesis.getVoices();
 
     if (voices.length > 0) {
-      speakCurrentSegment(voices);
+      speakCurrentChunk(voices);
       return;
     }
 
     const handleVoicesChanged = () => {
       const availableVoices = window.speechSynthesis.getVoices();
       if (availableVoices.length > 0) {
-        window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
-        speakCurrentSegment(availableVoices);
+        window.speechSynthesis.removeEventListener(
+          "voiceschanged",
+          handleVoicesChanged
+        );
+        speakCurrentChunk(availableVoices);
       }
     };
 
-    window.speechSynthesis.addEventListener("voiceschanged", handleVoicesChanged);
+    window.speechSynthesis.addEventListener(
+      "voiceschanged",
+      handleVoicesChanged
+    );
 
     window.setTimeout(() => {
-      window.speechSynthesis.removeEventListener("voiceschanged", handleVoicesChanged);
-      speakCurrentSegment(window.speechSynthesis.getVoices());
+      window.speechSynthesis.removeEventListener(
+        "voiceschanged",
+        handleVoicesChanged
+      );
+      speakCurrentChunk(window.speechSynthesis.getVoices());
     }, 900);
   }
 
