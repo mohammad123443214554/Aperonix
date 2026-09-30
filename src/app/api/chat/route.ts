@@ -321,15 +321,50 @@ export async function POST(request: Request) {
             .is("parent_file_id", null);
         }
 
-        const { data: attachmentRows, error: attachmentError } =
+        let { data: attachmentRows, error: attachmentError } =
           await attachmentQuery
             .order("created_at", { ascending: false })
             .limit(5);
 
+        // Keep the chat usable if the optional video-frame migration has not
+        // been run yet. The original attachment schema can still process
+        // text, images and video audio without making the whole chat fail.
+        if (
+          attachmentError &&
+          /parent_file_id|frame_timestamp_ms/i.test(
+            String(attachmentError.message ?? "")
+          )
+        ) {
+          const legacyQuery = authClient
+            .from("aperonix_files")
+            .select(
+              "id,message_id,original_name,storage_path,mime_type,size_bytes,status"
+            )
+            .eq("user_id", authData.user.id)
+            .eq("status", "ready")
+            .in("chat_id", attachmentChatIds);
+
+          const scopedLegacyQuery =
+            requestedAttachmentIds.length > 0
+              ? legacyQuery.in("id", requestedAttachmentIds)
+              : legacyQuery
+                  .in("message_id", attachmentMessageIds);
+
+          const legacyResult = await scopedLegacyQuery
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          attachmentRows = legacyResult.data as typeof attachmentRows;
+          attachmentError = legacyResult.error;
+        }
+
         if (attachmentError) {
           console.error("Aperonix attachment lookup error:", attachmentError);
           return NextResponse.json(
-            { error: "Could not load the attached files." },
+            {
+              error:
+                "Could not load the attached files. Please make sure the Aperonix file-storage SQL setup is complete."
+            },
             { status: 500 }
           );
         }
@@ -353,14 +388,13 @@ export async function POST(request: Request) {
             .limit(15);
 
           if (frameError) {
+            // Frame rows are an enhancement. A frame lookup failure must not
+            // turn an otherwise valid text/audio/file chat request into a
+            // generic "something went wrong" response.
             console.error("Aperonix video frame lookup error:", frameError);
-            return NextResponse.json(
-              { error: "Could not load the visual frames for the attached video." },
-              { status: 500 }
-            );
+          } else {
+            allAttachmentRows = [...allAttachmentRows, ...(frameRows ?? [])];
           }
-
-          allAttachmentRows = [...allAttachmentRows, ...(frameRows ?? [])];
         }
 
         if (allAttachmentRows.length > 0) {
