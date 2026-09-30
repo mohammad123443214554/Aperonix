@@ -5531,3 +5531,128 @@ body {
     padding: 0 8px;
   }
 }
+
+/* Final response action buttons — match the Aperonix Get Started button. */
+.message-actions .message-action-button {
+  position: relative;
+  width: 31px;
+  height: 31px;
+  flex: 0 0 31px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(#071629, #071629) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 48%, var(--aperonix-magenta)) border-box;
+  color: #b7d8f3;
+  box-shadow:
+    0 0 11px rgba(77,246,255,.07),
+    0 0 15px rgba(255,59,189,.04),
+    inset 0 1px 0 rgba(255,255,255,.06);
+  transition:
+    transform 150ms ease,
+    color 160ms ease,
+    box-shadow 170ms ease,
+    background 170ms ease,
+    filter 160ms ease;
+}
+
+.message-actions .message-action-button::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      115deg,
+      rgba(77,246,255,.075),
+      rgba(75,141,255,.055) 48%,
+      rgba(255,59,189,.075)
+    );
+  pointer-events: none;
+}
+
+.message-actions .message-action-button::after {
+  content: "";
+  position: absolute;
+  width: 34%;
+  height: 180%;
+  top: -40%;
+  left: -55%;
+  z-index: 2;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.20), transparent);
+  pointer-events: none;
+  transition: transform 520ms cubic-bezier(.2,.75,.2,1);
+}
+
+.message-actions .message-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  color: #f1faff;
+  background:
+    linear-gradient(#091d33, #091d33) padding-box,
+    linear-gradient(100deg, var(--aperonix-cyan), var(--aperonix-blue) 48%, var(--aperonix-magenta)) border-box;
+  box-shadow:
+    0 0 15px rgba(77,246,255,.13),
+    0 0 21px rgba(255,59,189,.075),
+    0 7px 17px rgba(0,0,0,.15),
+    inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.message-actions .message-action-button:hover:not(:disabled)::after {
+  transform: translateX(410%) rotate(18deg);
+}
+
+.message-actions .message-action-button:active:not(:disabled) {
+  transform: translateY(0) scale(.96);
+}
+
+.message-actions .message-action-button > svg {
+  position: relative;
+  z-index: 3;
+  width: 15px;
+  height: 15px;
+}
+
+.message-actions .message-action-button:disabled {
+  opacity: .38;
+}
+
+.message-actions .message-action-button.is-reading {
+  color: #f4fdff;
+  box-shadow:
+    0 0 14px rgba(77,246,255,.15),
+    0 0 19px rgba(255,59,189,.055),
+    inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.message-actions .message-action-button.is-feedback-good,
+.message-actions .message-action-button.is-feedback-bad {
+  color: #ffffff;
+}
+
+.message-actions .message-action-button.is-feedback-good {
+  box-shadow:
+    0 0 15px rgba(77,246,255,.16),
+    0 0 20px rgba(75,141,255,.08),
+    inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.message-actions .message-action-button.is-feedback-bad {
+  box-shadow:
+    0 0 15px rgba(255,59,189,.13),
+    0 0 20px rgba(255,59,189,.075),
+    inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-actions .message-action-button {
+    transition: none;
+  }
+
+  .message-actions .message-action-button::after {
+    display: none;
+  }
+}
