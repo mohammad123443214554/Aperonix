@@ -2936,7 +2936,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             </div>
           )}
 
-          <form className="composer" onSubmit={handleSubmit} onClick={(event) => event.stopPropagation()}>
+          <form className={`composer ${selectedFiles.length > 0 ? "has-files" : ""}`} onSubmit={handleSubmit} onClick={(event) => event.stopPropagation()}>
             {selectedFiles.length > 0 && (
               <div className="composer-file-area" aria-label="Selected files">
                 <div className="composer-file-header">
