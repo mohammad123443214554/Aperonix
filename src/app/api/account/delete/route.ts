@@ -49,6 +49,40 @@ export async function POST(request: Request) {
       }
     });
 
+    const { data: fileRows, error: fileRowsError } = await adminClient
+      .from("aperonix_files")
+      .select("storage_path")
+      .eq("user_id", authData.user.id);
+
+    if (fileRowsError) {
+      console.error("Aperonix file cleanup lookup error:", fileRowsError);
+      return NextResponse.json(
+        { error: "Could not permanently delete the account." },
+        { status: 500 }
+      );
+    }
+
+    const storagePaths = (fileRows ?? [])
+      .map((file) => file.storage_path)
+      .filter(
+        (path): path is string =>
+          typeof path === "string" && path.length > 0
+      );
+
+    if (storagePaths.length > 0) {
+      const { error: storageDeleteError } = await adminClient.storage
+        .from("aperonix-files")
+        .remove(storagePaths);
+
+      if (storageDeleteError) {
+        console.error("Aperonix file cleanup error:", storageDeleteError);
+        return NextResponse.json(
+          { error: "Could not permanently delete the account." },
+          { status: 500 }
+        );
+      }
+    }
+
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(
       authData.user.id,
       false
