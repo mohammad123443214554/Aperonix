@@ -281,7 +281,12 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [shareModal, setShareModal] = useState<{
     url: string | null;
     content: string;
-    kind: "response" | "prompt";
+    kind: "response" | "prompt" | "chat";
+    chatTitle?: string;
+    chatMessages?: Array<{
+      role: "user" | "assistant";
+      content: string;
+    }>;
     copied: boolean;
     preparing: boolean;
   } | null>(null);
@@ -1551,11 +1556,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     if (!copied) throw new Error("Could not copy the link.");
   }
 
-  async function createShareLink(message: ChatMessage) {
-    if (!activeSession || !message.id) {
-      throw new Error("This response is not ready to share yet.");
-    }
-
+  async function getAccessToken() {
     let { data: sessionData } = await supabase.auth.getSession();
 
     if (!sessionData.session) {
@@ -1565,6 +1566,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     const accessToken = sessionData.session?.access_token;
     if (!accessToken) throw new Error("Your session has expired. Please sign in again.");
+
+    return accessToken;
+  }
+
+  async function createShareLink(message: ChatMessage) {
+    if (!activeSession || !message.id) {
+      throw new Error("This response is not ready to share yet.");
+    }
+
+    const accessToken = await getAccessToken();
 
     const response = await fetch("/api/share", {
       method: "POST",
@@ -1586,6 +1597,28 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     return data.url as string;
   }
 
+  async function createShareChatLink(session: ChatSession) {
+    const accessToken = await getAccessToken();
+
+    const response = await fetch("/api/share-chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + accessToken
+      },
+      body: JSON.stringify({
+        chatId: session.id
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok || typeof data.url !== "string") {
+      throw new Error(data.error || "Could not create a chat share link.");
+    }
+
+    return data.url as string;
+  }
+
   async function openShareModal(message: ChatMessage) {
     setShareModal({
       url: null,
@@ -1598,14 +1631,50 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     try {
       const url = await createShareLink(message);
       setShareModal((current) =>
-        current && current.content === message.content
+        current && current.content === message.content && current.kind !== "chat"
           ? { ...current, url, preparing: false }
           : current
       );
     } catch (error) {
       console.error("Create share link error:", error);
       setShareModal((current) =>
-        current && current.content === message.content
+        current && current.content === message.content && current.kind !== "chat"
+          ? { ...current, preparing: false }
+          : current
+      );
+    }
+  }
+
+  async function openChatShareModal(session: ChatSession) {
+    const chatMessages = session.messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({
+        role: message.role as "user" | "assistant",
+        content: message.content
+      }));
+
+    setOpenMenuId(null);
+    setShareModal({
+      url: null,
+      content: "",
+      kind: "chat",
+      chatTitle: session.title,
+      chatMessages,
+      copied: false,
+      preparing: true
+    });
+
+    try {
+      const url = await createShareChatLink(session);
+      setShareModal((current) =>
+        current && current.kind === "chat" && current.chatTitle === session.title
+          ? { ...current, url, preparing: false }
+          : current
+      );
+    } catch (error) {
+      console.error("Create chat share link error:", error);
+      setShareModal((current) =>
+        current && current.kind === "chat" && current.chatTitle === session.title
           ? { ...current, preparing: false }
           : current
       );
@@ -1618,13 +1687,17 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     try {
       await navigator.share({
         title:
-          shareModal.kind === "prompt"
-            ? "Aperonix AI prompt"
-            : "Aperonix AI response",
+          shareModal.kind === "chat"
+            ? "Aperonix AI chat"
+            : shareModal.kind === "prompt"
+              ? "Aperonix AI prompt"
+              : "Aperonix AI response",
         text:
-          shareModal.kind === "prompt"
-            ? "A prompt shared from Aperonix AI."
-            : "A response shared from Aperonix AI.",
+          shareModal.kind === "chat"
+            ? "A chat shared from Aperonix AI."
+            : shareModal.kind === "prompt"
+              ? "A prompt shared from Aperonix AI."
+              : "A response shared from Aperonix AI.",
         url: shareModal.url
       });
     } catch (error) {
@@ -2307,6 +2380,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                     <button type="button" onClick={() => void handleDuplicate(session)}>
                       Duplicate
                     </button>
+                    <button type="button" onClick={() => void openChatShareModal(session)}>
+                      Share chat
+                    </button>
                     <button type="button" onClick={() => void handleRename(session)}>
                       Rename
                     </button>
@@ -2393,6 +2469,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   >
                     <button type="button" onClick={() => void handleDuplicate(session)}>
                       Duplicate
+                    </button>
+                    <button type="button" onClick={() => void openChatShareModal(session)}>
+                      Share chat
                     </button>
                     <button type="button" onClick={() => void handleRename(session)}>
                       Rename
@@ -3302,12 +3381,18 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               <div>
                 <span className="hero-kicker">Aperonix AI</span>
                 <h2 id="share-response-title">
-                  {shareModal.kind === "prompt" ? "Share prompt" : "Share response"}
+                  {shareModal.kind === "chat"
+                    ? "Share chat"
+                    : shareModal.kind === "prompt"
+                      ? "Share prompt"
+                      : "Share response"}
                 </h2>
                 <p>
-                  {shareModal.kind === "prompt"
-                    ? "Share this prompt with anyone using a link."
-                    : "Share this response with anyone using a link."}
+                  {shareModal.kind === "chat"
+                    ? "Share this entire conversation with anyone using a link."
+                    : shareModal.kind === "prompt"
+                      ? "Share this prompt with anyone using a link."
+                      : "Share this response with anyone using a link."}
                 </p>
               </div>
               <button
@@ -3320,9 +3405,33 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               </button>
             </div>
 
-            <div className="share-response-preview">
-              <ReactMarkdown>{shareModal.content}</ReactMarkdown>
-            </div>
+            {shareModal.kind === "chat" ? (
+              <div className="share-response-preview share-chat-preview">
+                <div className="share-chat-preview-title">
+                  <span>Full conversation</span>
+                  <strong>{shareModal.chatTitle}</strong>
+                </div>
+                <div className="share-chat-preview-list">
+                  {(shareModal.chatMessages ?? []).map((message, index) => (
+                    <div
+                      key={`share-chat-preview-${index}`}
+                      className={`share-chat-preview-message ${message.role === "user" ? "is-user" : "is-assistant"}`}
+                    >
+                      <div className="share-chat-preview-role">
+                        {message.role === "user" ? "You" : "Aperonix AI"}
+                      </div>
+                      <div className="share-chat-preview-content">
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="share-response-preview">
+                <ReactMarkdown>{shareModal.content}</ReactMarkdown>
+              </div>
+            )}
 
             <div className="share-link-box">
               <span>
@@ -3376,9 +3485,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             </div>
 
             <p className="share-modal-note">
-              {shareModal.kind === "prompt"
-                ? "Only this selected Aperonix prompt is shared. Your private chat history is not included."
-                : "Only this selected Aperonix response is shared. Your private chat history is not included."}
+              {shareModal.kind === "chat"
+                ? "The complete conversation shown above is shared. Other private chats are not included."
+                : shareModal.kind === "prompt"
+                  ? "Only this selected Aperonix prompt is shared. Your private chat history is not included."
+                  : "Only this selected Aperonix response is shared. Your private chat history is not included."}
             </p>
           </section>
         </div>
