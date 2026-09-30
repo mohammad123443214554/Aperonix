@@ -5465,37 +5465,7 @@ body {
   }
 }
 
-/* Branch chats: deliberately distinct from Share. */
-.branch-response-button {
-  border-radius: 6px !important;
-  background:
-    linear-gradient(145deg, rgba(22, 18, 51, .82), rgba(8, 13, 31, .86)) padding-box,
-    linear-gradient(135deg, rgba(166, 102, 255, .42), rgba(78, 126, 255, .28)) border-box !important;
-  color: #a99bda !important;
-  box-shadow:
-    inset 0 1px rgba(255,255,255,.035),
-    0 0 9px rgba(118, 91, 255, .035);
-}
-
-.branch-response-button::after {
-  display: none !important;
-}
-
-.branch-response-button:hover:not(:disabled) {
-  color: #eee7ff !important;
-  background:
-    linear-gradient(145deg, rgba(38, 27, 69, .92), rgba(9, 16, 37, .92)) padding-box,
-    linear-gradient(135deg, rgba(186, 122, 255, .70), rgba(91, 141, 255, .52)) border-box !important;
-  box-shadow:
-    0 0 11px rgba(148, 101, 255, .10),
-    0 0 12px rgba(86, 133, 255, .055);
-}
-
-.branch-response-button > svg {
-  width: 15px;
-  height: 15px;
-}
-
+/* Branch response button intentionally inherits the same Get Started-style treatment as every response action. */
 .branch-chat-badge {
   display: inline-flex;
   align-items: center;
