@@ -53,6 +53,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       messages?: ChatMessage[];
       aperonixSetting?: string;
+      branchFromChatId?: string | null;
+      branchFromMessageId?: string | null;
     };
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const requestAperonixSetting =
@@ -71,14 +73,80 @@ export async function POST(request: Request) {
         role: message.role,
         content: message.content.trim()
       }))
-      .filter((message) => message.content.length > 0)
-      .slice(-40);
+      .filter((message) => message.content.length > 0);
 
     if (sanitizedMessages.length === 0) {
       return NextResponse.json(
         { error: "At least one message is required." },
         { status: 400 }
       );
+    }
+
+    const branchFromChatId =
+      typeof body.branchFromChatId === "string" ? body.branchFromChatId : "";
+    const branchFromMessageId =
+      typeof body.branchFromMessageId === "string" ? body.branchFromMessageId : "";
+
+    let effectiveMessages = sanitizedMessages;
+
+    if (branchFromChatId && branchFromMessageId) {
+      const { data: branchMessage, error: branchMessageError } = await authClient
+        .from("chat_messages")
+        .select("id,chat_id,user_id,role,content,created_at")
+        .eq("id", branchFromMessageId)
+        .eq("chat_id", branchFromChatId)
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (branchMessageError) {
+        console.error("Branch source lookup error:", branchMessageError);
+        return NextResponse.json(
+          { error: "Could not load the branch conversation memory." },
+          { status: 500 }
+        );
+      }
+
+      if (!branchMessage || branchMessage.role !== "assistant") {
+        return NextResponse.json(
+          { error: "The selected branch source is no longer available." },
+          { status: 400 }
+        );
+      }
+
+      const { data: earlierRows, error: earlierError } = await authClient
+        .from("chat_messages")
+        .select("id,role,content,created_at")
+        .eq("chat_id", branchFromChatId)
+        .eq("user_id", authData.user.id)
+        .lt("created_at", branchMessage.created_at)
+        .in("role", ["user", "assistant"])
+        .order("created_at", { ascending: false })
+        .limit(39);
+
+      if (earlierError) {
+        console.error("Branch context lookup error:", earlierError);
+        return NextResponse.json(
+          { error: "Could not load the branch conversation memory." },
+          { status: 500 }
+        );
+      }
+
+      const branchContext = [
+        ...(earlierRows ?? []).reverse(),
+        {
+          id: branchMessage.id,
+          role: branchMessage.role,
+          content: branchMessage.content,
+          created_at: branchMessage.created_at
+        }
+      ].map((message) => ({
+        role: message.role as "user" | "assistant",
+        content: message.content
+      }));
+
+      effectiveMessages = [...branchContext, ...sanitizedMessages].slice(-40);
+    } else {
+      effectiveMessages = sanitizedMessages.slice(-40);
     }
 
     const { data: profileData, error: profileError } = await authClient
@@ -104,7 +172,7 @@ export async function POST(request: Request) {
 
     const completion = await getGroqClient().chat.completions.create({
       model: GROQ_MODEL,
-      messages: buildGroqMessages(sanitizedMessages, aperonixSetting),
+      messages: buildGroqMessages(effectiveMessages, aperonixSetting),
       temperature: 0.7,
       max_completion_tokens: 2048,
       stream: false
