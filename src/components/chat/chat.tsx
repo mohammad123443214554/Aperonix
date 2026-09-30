@@ -2504,6 +2504,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setFileUploadProgress(0);
 
     const uploadedFilesForPrompt: Array<{ id: string; storagePath: string }> = [];
+    const uploadedOriginalFilesForPrompt: Array<{ id: string; storagePath: string }> = [];
     let attachmentsCommitted = false;
 
     try {
@@ -2663,6 +2664,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           );
 
           uploadedFilesForPrompt.push(uploaded);
+          uploadedOriginalFilesForPrompt.push(uploaded);
 
           if (file.type.toLowerCase().startsWith("video/")) {
             setFileUploadStatus(
@@ -2743,7 +2745,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             : { data: null };
 
           return {
-            id: uploadedFilesForPrompt[index]?.id ?? crypto.randomUUID(),
+            id: uploadedOriginalFilesForPrompt[index]?.id ?? crypto.randomUUID(),
             name: file.name,
             sizeBytes: file.size,
             mimeType: file.type || "application/octet-stream",
@@ -2804,7 +2806,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           generateTitle:
             activeSession.title === "New chat" &&
             activeSession.messages.length === 0,
-          attachmentIds: uploadedFilesForPrompt.map((file) => file.id)
+          attachmentIds: uploadedOriginalFilesForPrompt.map((file) => file.id)
         })
       });
 
