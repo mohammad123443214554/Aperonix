@@ -610,7 +610,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       const next: ChatSession = {
         id: data.id,
-        title: data.title,
+        title: data.title || `${activeSession.title} — Branch`,
         messages: [],
         createdAt: new Date(data.created_at).getTime(),
         updatedAt: new Date(data.updated_at).getTime(),
@@ -1654,7 +1654,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         .from("chat_sessions")
         .insert({
           user_id: user.id,
-          title: "New chat",
+          title: `${activeSession.title} — Branch`,
           is_pinned: false,
           branch_from_chat_id: activeSession.id,
           branch_from_message_id: message.id
@@ -2273,6 +2273,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
           <div className="mobile-title">
             <span>{activeSession?.title || "Aperonix AI"}</span>
+            {activeSession?.branchFromChatId && (
+              <span className="branch-chat-badge">Branch</span>
+            )}
           </div>
         </header>
 
@@ -2282,6 +2285,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               <div className="empty-chat-welcome" aria-label="Aperonix welcome">
                 <img src="/aperonix-logo.png" alt="Aperonix AI" className="empty-chat-logo" />
                 <p className="empty-chat-greeting">Hello! How can I help you today?</p>
+                {activeSession?.branchFromChatId && (
+                  <p className="branch-memory-note">
+                    This is a branch chat. Your previous conversation memory is available here, while this chat starts with no messages.
+                  </p>
+                )}
               </div>
             ) : (
               messages.map((message, index) => (
