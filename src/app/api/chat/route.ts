@@ -10,6 +10,103 @@ import type { ChatMessage } from "@/types/chat";
 
 export const runtime = "nodejs";
 
+function cleanGeneratedTitle(value: string, fallback: string) {
+  const cleaned = value
+    .replace(/^\s*["'“”‘’]+|["'“”‘’]+\s*$/g, "")
+    .replace(/^\s*(title|chat name|conversation name)\s*:\s*/i, "")
+    .replace(/^\s*[-*#]+\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+
+  return cleaned || fallback;
+}
+
+function fallbackChatTitle(prompt: string) {
+  const cleaned = prompt.replace(/\s+/g, " ").trim();
+  return cleaned.length > 42
+    ? `${cleaned.slice(0, 42).trimEnd()}…`
+    : cleaned || "New chat";
+}
+
+function escapeIlike(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+async function createUniqueChatTitle(
+  prompt: string,
+  response: string,
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  chatId: string
+) {
+  const fallback = fallbackChatTitle(prompt);
+  let candidate = fallback;
+
+  try {
+    const completion = await getGroqClient().chat.completions.create({
+      model: GROQ_MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate a concise, natural title for this chat from the user's first message and Aperonix AI's response. " +
+            "Use 2 to 6 words. Capture the main topic, goal, or task rather than copying the user's sentence. " +
+            "Use the same language style as the conversation. Return only the title, with no quotes, markdown, emojis, or explanation."
+        },
+        {
+          role: "user",
+          content:
+            `User's first message:
+<user_message>
+${prompt.slice(0, 5000)}
+</user_message>
+
+Aperonix AI's response:
+<assistant_response>
+${response.slice(0, 7000)}
+</assistant_response>`
+        }
+      ],
+      temperature: 0.35,
+      max_completion_tokens: 32,
+      stream: false
+    });
+
+    candidate = cleanGeneratedTitle(
+      completion.choices[0]?.message?.content || "",
+      fallback
+    );
+  } catch (error) {
+    console.error("Chat title generation error:", error);
+  }
+
+  let uniqueTitle = candidate;
+
+  for (let suffix = 2; suffix <= 99; suffix += 1) {
+    const { data: matches, error } = await supabase
+      .from("chat_sessions")
+      .select("id,title")
+      .eq("user_id", userId)
+      .neq("id", chatId)
+      .ilike("title", escapeIlike(uniqueTitle))
+      .limit(1);
+
+    if (error) {
+      console.error("Chat title uniqueness check error:", error);
+      return uniqueTitle;
+    }
+
+    if (!matches || matches.length === 0) {
+      return uniqueTitle;
+    }
+
+    uniqueTitle = `${candidate} (${suffix})`.slice(0, 60);
+  }
+
+  return `${candidate} ${Date.now()}`.slice(0, 60);
+}
+
 export async function POST(request: Request) {
   try {
     const authorization = request.headers.get("authorization");
@@ -55,6 +152,8 @@ export async function POST(request: Request) {
       aperonixSetting?: string;
       branchFromChatId?: string | null;
       branchFromMessageId?: string | null;
+      chatId?: string;
+      generateTitle?: boolean;
     };
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const requestAperonixSetting =
@@ -180,11 +279,29 @@ export async function POST(request: Request) {
 
     const content = completion.choices[0]?.message?.content || "";
 
+    const shouldGenerateTitle =
+      body.generateTitle === true &&
+      typeof body.chatId === "string" &&
+      body.chatId.trim().length > 0 &&
+      sanitizedMessages.length === 1 &&
+      sanitizedMessages[0].role === "user";
+
+    const title = shouldGenerateTitle
+      ? await createUniqueChatTitle(
+          sanitizedMessages[0].content,
+          content,
+          authClient,
+          authData.user.id,
+          body.chatId.trim()
+        )
+      : null;
+
     return NextResponse.json({
       message: {
         role: "assistant",
         content
       },
+      title,
       model: completion.model
     });
   } catch (error) {
