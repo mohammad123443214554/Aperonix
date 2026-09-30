@@ -610,7 +610,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       const next: ChatSession = {
         id: data.id,
-        title: data.title || `${activeSession.title} — Branch`,
+        title: data.title || branchTitle,
         messages: [],
         createdAt: new Date(data.created_at).getTime(),
         updatedAt: new Date(data.updated_at).getTime(),
@@ -1650,11 +1650,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     try {
       const user = await ensureAuthenticatedUser();
 
+      const branchTitle = `${activeSession.title.replace(/ — Branch$/i, "")} — Branch`;
+
       const { data, error } = await supabase
         .from("chat_sessions")
         .insert({
           user_id: user.id,
-          title: `${activeSession.title} — Branch`,
+          title: branchTitle,
           is_pinned: false,
           branch_from_chat_id: activeSession.id,
           branch_from_message_id: message.id
