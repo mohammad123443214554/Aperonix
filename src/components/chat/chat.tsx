@@ -272,6 +272,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [activeSessionId, setActiveSessionId] = useState("");
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [pinFlashId, setPinFlashId] = useState<string | null>(null);
@@ -2842,7 +2844,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             </div>
           )}
 
-          <form className="composer" onSubmit={handleSubmit}>
+          <form className="composer" onSubmit={handleSubmit} onClick={(event) => event.stopPropagation()}>
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -2858,7 +2860,46 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             />
 
             <div className="composer-toolbar">
-              <span className="composer-plus" aria-hidden="true">+</span>
+              <div className="composer-upload-wrap">
+                <button
+                  type="button"
+                  className={`composer-plus ${isUploadMenuOpen ? "is-open" : ""}`}
+                  onClick={() => setIsUploadMenuOpen((current) => !current)}
+                  aria-label="Open upload options"
+                  aria-expanded={isUploadMenuOpen}
+                  title="Add files"
+                >
+                  <span aria-hidden="true">+</span>
+                </button>
+
+                {isUploadMenuOpen && (
+                  <div
+                    className="composer-upload-menu"
+                    role="dialog"
+                    aria-label="Aperonix upload options"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="composer-upload-heading">
+                      <span className="composer-upload-kicker">APERONIX AI</span>
+                      <strong>Add files</strong>
+                      <p>Attach files to your Aperonix conversation.</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="composer-upload-button"
+                      onClick={() => uploadInputRef.current?.click()}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 16V4" />
+                        <path d="m7.5 8.5 4.5-4.5 4.5 4.5" />
+                        <path d="M5 14.5v3A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-3" />
+                      </svg>
+                      <span>Upload file</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <button
                 type="submit"
@@ -2872,6 +2913,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               </button>
             </div>
           </form>
+
+          <input
+            ref={uploadInputRef}
+            type="file"
+            className="composer-file-input"
+            onChange={() => {
+              setIsUploadMenuOpen(false);
+            }}
+            aria-hidden="true"
+          />
 
           <p className="composer-note">
             Aperonix AI can make mistakes. Check important information.
