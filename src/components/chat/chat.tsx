@@ -585,11 +585,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
   const canSend = useMemo(
     () =>
-      (input.trim().length > 0 || selectedFiles.length > 0) &&
+      input.trim().length > 0 &&
       !isLoading &&
-      Boolean(activeSession) &&
-      !editingMessageId,
-    [input, selectedFiles.length, isLoading, activeSession, editingMessageId]
+      Boolean(activeSession),
+    [input, isLoading, activeSession]
   );
 
   const MAX_FILES_PER_PROMPT = 5;
