@@ -860,7 +860,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       parentFileId?: string | null;
       frameTimestampMs?: number | null;
     }
-  ) {
+  ): Promise<{ id: string; storagePath: string; supportsVideoFrames: boolean }> {
     const storagePath = createStoragePath(userId, chatId, file);
     const contentType = file.type || "application/octet-stream";
 
@@ -929,21 +929,50 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       });
     }
 
-    const { data, error: metadataError } = await supabase
+    const baseMetadata = {
+      user_id: userId,
+      chat_id: chatId,
+      original_name: file.name,
+      storage_path: storagePath,
+      mime_type: contentType,
+      size_bytes: file.size,
+      status: "uploaded" as const
+    };
+
+    // Video frames use two optional columns added by
+    // supabase/aperonix_video_frames.sql. If that migration has not been
+    // applied yet, keep normal file uploads working and gracefully fall back
+    // to the original file schema. Video visual-frame extraction is skipped
+    // in that case; the video itself can still be processed for audio.
+    let { data, error: metadataError } = await supabase
       .from("aperonix_files")
       .insert({
-        user_id: userId,
-        chat_id: chatId,
-        original_name: file.name,
-        storage_path: storagePath,
-        mime_type: contentType,
-        size_bytes: file.size,
-        status: "uploaded",
+        ...baseMetadata,
         parent_file_id: options?.parentFileId ?? null,
         frame_timestamp_ms: options?.frameTimestampMs ?? null
       })
       .select("id,storage_path")
       .single();
+
+    let supportsVideoFrames = true;
+
+    if (
+      metadataError &&
+      /parent_file_id|frame_timestamp_ms|column.*does not exist/i.test(
+        String(metadataError.message ?? "")
+      )
+    ) {
+      supportsVideoFrames = false;
+
+      const legacyResult = await supabase
+        .from("aperonix_files")
+        .insert(baseMetadata)
+        .select("id,storage_path")
+        .single();
+
+      data = legacyResult.data;
+      metadataError = legacyResult.error;
+    }
 
     if (metadataError || !data) {
       await supabase.storage
@@ -954,7 +983,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     return {
       id: data.id as string,
-      storagePath: data.storage_path as string
+      storagePath: data.storage_path as string,
+      supportsVideoFrames
     };
   }
 
@@ -2504,7 +2534,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setFileUploadProgress(0);
 
     const uploadedFilesForPrompt: Array<{ id: string; storagePath: string }> = [];
-    const uploadedOriginalFilesForPrompt: Array<{ id: string; storagePath: string }> = [];
+    const uploadedOriginalFilesForPrompt: Array<{
+      id: string;
+      storagePath: string;
+    }> = [];
     let attachmentsCommitted = false;
 
     try {
@@ -2666,7 +2699,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           uploadedFilesForPrompt.push(uploaded);
           uploadedOriginalFilesForPrompt.push(uploaded);
 
-          if (file.type.toLowerCase().startsWith("video/")) {
+          if (
+            file.type.toLowerCase().startsWith("video/") &&
+            uploaded.supportsVideoFrames
+          ) {
             setFileUploadStatus(
               "Preparing 3 visual frames for Aperonix: " + file.name
             );
@@ -2704,7 +2740,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           }
         }
 
-        setFileUploadStatus("Files and video visual frames uploaded successfully.");
+        setFileUploadStatus("Files uploaded successfully.");
+        if (
+          selectedFiles.some((file) => file.type.toLowerCase().startsWith("video/")) &&
+          !uploadedOriginalFilesForPrompt.every(() => true)
+        ) {
+          // Kept intentionally empty; upload capability is tracked per file.
+        }
         setFileUploadProgress(100);
       }
 
