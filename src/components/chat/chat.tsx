@@ -1617,8 +1617,14 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     try {
       await navigator.share({
-        title: "Aperonix AI response",
-        text: "A response shared from Aperonix AI.",
+        title:
+          shareModal.kind === "prompt"
+            ? "Aperonix AI prompt"
+            : "Aperonix AI response",
+        text:
+          shareModal.kind === "prompt"
+            ? "A prompt shared from Aperonix AI."
+            : "A response shared from Aperonix AI.",
         url: shareModal.url
       });
     } catch (error) {
