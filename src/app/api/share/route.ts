@@ -69,17 +69,19 @@ export async function POST(request: Request) {
     if (messageError) {
       console.error("Share source message lookup error:", messageError);
       return NextResponse.json(
-        { error: "Could not prepare this response for sharing." },
+        { error: "Could not prepare this message for sharing." },
         { status: 500 }
       );
     }
 
-    if (!message || message.role !== "assistant") {
+    if (!message || (message.role !== "assistant" && message.role !== "user")) {
       return NextResponse.json(
-        { error: "Only Aperonix responses can be shared." },
+        { error: "This message cannot be shared." },
         { status: 404 }
       );
     }
+
+    const shareKind = message.role === "user" ? "prompt" : "response";
 
     const { data: existing, error: existingError } = await supabase
       .from("shared_responses")
@@ -108,7 +110,8 @@ export async function POST(request: Request) {
         user_id: authData.user.id,
         chat_id: message.chat_id,
         message_id: message.id,
-        content: message.content
+        content: message.content,
+        content_type: shareKind
       })
       .select("id")
       .single();
