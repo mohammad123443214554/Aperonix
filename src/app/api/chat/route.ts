@@ -292,7 +292,7 @@ export async function POST(request: Request) {
           content,
           authClient,
           authData.user.id,
-          body.chatId.trim()
+          body.chatId?.trim() || ""
         )
       : null;
 
