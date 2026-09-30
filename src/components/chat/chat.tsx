@@ -2538,14 +2538,25 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         if (attachmentLinkError) throw attachmentLinkError;
       }
 
-      const messageAttachments: ChatAttachment[] = selectedFiles.map((file, index) => ({
-        id: uploadedFilesForPrompt[index]?.id ?? crypto.randomUUID(),
-        name: file.name,
-        sizeBytes: file.size,
-        mimeType: file.type || "application/octet-stream",
-        storagePath: uploadedFilesForPrompt[index]?.storagePath ?? "",
-        url: URL.createObjectURL(file)
-      }));
+      const messageAttachments = await Promise.all(
+        selectedFiles.map(async (file, index) => {
+          const storagePath = uploadedFilesForPrompt[index]?.storagePath ?? "";
+          const { data: signedFile } = storagePath
+            ? await supabase.storage
+                .from("aperonix-files")
+                .createSignedUrl(storagePath, 60 * 60)
+            : { data: null };
+
+          return {
+            id: uploadedFilesForPrompt[index]?.id ?? crypto.randomUUID(),
+            name: file.name,
+            sizeBytes: file.size,
+            mimeType: file.type || "application/octet-stream",
+            storagePath,
+            url: signedFile?.signedUrl ?? undefined
+          } satisfies ChatAttachment;
+        })
+      );
 
       attachmentsCommitted = true;
       setSelectedFiles([]);
