@@ -708,6 +708,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     if (isLoading) return;
     stopReadAloud();
     setActiveSessionId(id);
+    setPendingFiles([]);
+    setFileUploadError("");
     setOpenMenuId(null);
     setIsSidebarOpen(false);
     navigate(`/chat/${id}`);
@@ -740,6 +742,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setSessions((current) => sortSessions([...current, next]));
       setActiveSessionId(next.id);
+      setPendingFiles([]);
+      setFileUploadError("");
       navigate(`/chat/${next.id}`);
     } catch (error) {
       console.error("New chat error:", error);
@@ -761,6 +765,21 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     const session = deleteSession;
     setDeleteSession(null);
+
+    const attachmentPaths = session.messages
+      .flatMap((message) => message.attachments ?? [])
+      .map((attachment) => attachment.storagePath)
+      .filter((path): path is string => Boolean(path));
+
+    if (attachmentPaths.length > 0) {
+      const { error: storageDeleteError } = await supabase.storage
+        .from("chat-files")
+        .remove(attachmentPaths);
+
+      if (storageDeleteError) {
+        console.error("Delete chat files error:", storageDeleteError);
+      }
+    }
 
     const { error } = await supabase
       .from("chat_sessions")
@@ -1995,6 +2014,35 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     if (removedMessageIds.length === 0) return;
 
+    const removedAttachmentPaths = removedMessages
+      .flatMap((message) => message.attachments ?? [])
+      .map((attachment) => attachment.storagePath)
+      .filter((path): path is string => Boolean(path));
+
+    if (removedAttachmentPaths.length > 0) {
+      const { error: storageDeleteError } = await supabase.storage
+        .from("chat-files")
+        .remove(removedAttachmentPaths);
+
+      if (storageDeleteError) {
+        console.error("Delete removed chat files error:", storageDeleteError);
+      }
+    }
+
+    const { error: attachmentDeleteError } = await supabase
+      .from("chat_attachments")
+      .delete()
+      .eq("chat_id", session.id)
+      .eq("user_id", userId)
+      .in("message_id", removedMessageIds);
+
+    if (
+      attachmentDeleteError &&
+      !/does not exist|relation .*chat_attachments/i.test(attachmentDeleteError.message)
+    ) {
+      throw attachmentDeleteError;
+    }
+
     const { error: messageDeleteError } = await supabase
       .from("chat_messages")
       .delete()
@@ -2039,7 +2087,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           Authorization: `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          messages: retryContext.map(({ role, content }) => ({ role, content })),
+          messages: retryContext,
           aperonixSetting,
           branchFromChatId: activeSession.branchFromChatId ?? null,
           branchFromMessageId: activeSession.branchFromMessageId ?? null,
