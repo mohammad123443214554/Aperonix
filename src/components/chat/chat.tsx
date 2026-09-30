@@ -273,6 +273,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileSelectionError, setFileSelectionError] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -579,6 +581,93 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     () => input.trim().length > 0 && !isLoading && Boolean(activeSession),
     [input, isLoading, activeSession]
   );
+
+  const MAX_FILES_PER_PROMPT = 5;
+
+  function getFileSizeLimit(file: File) {
+    const type = file.type.toLowerCase();
+
+    if (type.startsWith("video/")) return 50 * 1024 * 1024;
+    if (type.startsWith("audio/")) return 30 * 1024 * 1024;
+    if (type.startsWith("image/")) return 20 * 1024 * 1024;
+
+    if (
+      type === "application/pdf" ||
+      type.includes("word") ||
+      type.includes("document") ||
+      type.includes("spreadsheet") ||
+      type.includes("excel") ||
+      type.includes("presentation") ||
+      type.includes("powerpoint") ||
+      type === "text/plain" ||
+      type === "text/csv"
+    ) {
+      return 20 * 1024 * 1024;
+    }
+
+    return 25 * 1024 * 1024;
+  }
+
+  function formatFileSize(bytes: number) {
+    if (bytes < 1024 * 1024) {
+      return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  }
+
+  function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
+    const incomingFiles = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (!incomingFiles.length) return;
+
+    const remainingSlots = MAX_FILES_PER_PROMPT - selectedFiles.length;
+
+    if (remainingSlots <= 0) {
+      setFileSelectionError("You can upload a maximum of 5 files per prompt.");
+      return;
+    }
+
+    const accepted: File[] = [];
+    const rejected: string[] = [];
+
+    for (const file of incomingFiles.slice(0, remainingSlots)) {
+      const limit = getFileSizeLimit(file);
+
+      if (file.size > limit) {
+        rejected.push(`${file.name} is larger than the ${formatFileSize(limit)} limit.`);
+        continue;
+      }
+
+      const duplicate = selectedFiles.some(
+        (selected) =>
+          selected.name === file.name &&
+          selected.size === file.size &&
+          selected.lastModified === file.lastModified
+      );
+
+      if (!duplicate) accepted.push(file);
+    }
+
+    if (incomingFiles.length > remainingSlots) {
+      rejected.push("Only 5 files can be attached to one prompt.");
+    }
+
+    setSelectedFiles((current) => [...current, ...accepted]);
+
+    if (rejected.length) {
+      setFileSelectionError(rejected.slice(0, 2).join(" "));
+    } else {
+      setFileSelectionError("");
+    }
+
+    setIsUploadMenuOpen(false);
+  }
+
+  function removeSelectedFile(index: number) {
+    setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+    setFileSelectionError("");
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2848,6 +2937,45 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           )}
 
           <form className="composer" onSubmit={handleSubmit} onClick={(event) => event.stopPropagation()}>
+            {selectedFiles.length > 0 && (
+              <div className="composer-file-area" aria-label="Selected files">
+                <div className="composer-file-header">
+                  <span>Attached files</span>
+                  <span>{selectedFiles.length}/5</span>
+                </div>
+
+                <div className="composer-file-list">
+                  {selectedFiles.map((file, index) => (
+                    <div
+                      className="composer-file-item"
+                      key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                    >
+                      <div className="composer-file-icon" aria-hidden="true">↗</div>
+                      <div className="composer-file-info">
+                        <strong title={file.name}>{file.name}</strong>
+                        <span>{formatFileSize(file.size)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="composer-file-remove"
+                        onClick={() => removeSelectedFile(index)}
+                        aria-label={`Remove ${file.name}`}
+                        title="Remove file"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {fileSelectionError && (
+              <div className="composer-file-error" role="alert">
+                {fileSelectionError}
+              </div>
+            )}
+
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -2882,12 +3010,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                     aria-label="Aperonix upload options"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <div className="composer-upload-heading">
-                      <span className="composer-upload-kicker">APERONIX AI</span>
-                      <strong>Add files</strong>
-                      <p>Attach files to your Aperonix conversation.</p>
-                    </div>
-
                     <button
                       type="button"
                       className="composer-upload-button"
@@ -2921,9 +3043,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             ref={uploadInputRef}
             type="file"
             className="composer-file-input"
-            onChange={() => {
-              setIsUploadMenuOpen(false);
-            }}
+            multiple
+            onChange={handleFileSelection}
             aria-hidden="true"
           />
 
