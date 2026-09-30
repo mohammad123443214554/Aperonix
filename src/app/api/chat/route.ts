@@ -304,22 +304,27 @@ export async function POST(request: Request) {
       );
 
       if (attachmentChatIds.length > 0) {
-        const { data: attachmentRows, error: attachmentError } = await authClient
+        let attachmentQuery = authClient
           .from("aperonix_files")
           .select(
             "id,message_id,parent_file_id,frame_timestamp_ms,original_name,storage_path,mime_type,size_bytes,status"
           )
           .eq("user_id", authData.user.id)
           .eq("status", "ready")
-          .in("chat_id", attachmentChatIds)
-          .in(
-            requestedAttachmentIds.length > 0 ? "id" : "message_id",
-            requestedAttachmentIds.length > 0
-              ? requestedAttachmentIds
-              : attachmentMessageIds
-          )
-          .order("created_at", { ascending: false })
-          .limit(5);
+          .in("chat_id", attachmentChatIds);
+
+        if (requestedAttachmentIds.length > 0) {
+          attachmentQuery = attachmentQuery.in("id", requestedAttachmentIds);
+        } else {
+          attachmentQuery = attachmentQuery
+            .in("message_id", attachmentMessageIds)
+            .is("parent_file_id", null);
+        }
+
+        const { data: attachmentRows, error: attachmentError } =
+          await attachmentQuery
+            .order("created_at", { ascending: false })
+            .limit(5);
 
         if (attachmentError) {
           console.error("Aperonix attachment lookup error:", attachmentError);
