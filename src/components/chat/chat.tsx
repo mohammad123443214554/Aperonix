@@ -2361,11 +2361,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                         title="Branch in new chat"
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <circle cx="7" cy="6" r="2.1" />
-                          <circle cx="7" cy="18" r="2.1" />
-                          <circle cx="17" cy="12" r="2.1" />
-                          <path d="M7 8.1v2.5a3.4 3.4 0 0 0 3.4 3.4H17" />
-                          <path d="M7 15.9v-2.5a3.4 3.4 0 0 1 3.4-3.4H17" />
+                          <path d="M7 4v7a5 5 0 0 0 5 5h5" />
+                          <path d="M7 12a5 5 0 0 1 5-5h3" />
+                          <path d="m15 4 3 3-3 3" />
+                          <path d="m15 16 3 3-3 3" />
                         </svg>
                       </button>
 
