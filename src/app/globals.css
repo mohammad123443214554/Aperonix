@@ -3008,6 +3008,130 @@ body {
 }
 
 
+.composer-file-area {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  padding: 3px 3px 8px;
+}
+
+.composer-file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 7px;
+  color: #8ea5c0;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .02em;
+}
+
+.composer-file-list {
+  display: flex;
+  gap: 7px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1px 1px 3px;
+  scrollbar-width: thin;
+}
+
+.composer-file-item {
+  position: relative;
+  min-width: 190px;
+  max-width: 235px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid rgba(77,246,255,.18);
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(8,24,46,.96), rgba(4,13,28,.96));
+  box-shadow: inset 0 1px rgba(255,255,255,.035);
+}
+
+.composer-file-icon {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 29px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(77,246,255,.28);
+  border-radius: 9px;
+  color: #6defff;
+  font-size: 14px;
+  background: rgba(77,246,255,.035);
+}
+
+.composer-file-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-file-info strong {
+  max-width: 155px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #eaf4ff;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.composer-file-info span {
+  color: #718aa7;
+  font-size: 8px;
+}
+
+.composer-file-remove {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 50%;
+  background: rgba(255,255,255,.025);
+  color: #a9bfd7;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.composer-file-remove:hover {
+  border-color: rgba(255,59,189,.45);
+  background: rgba(255,59,189,.07);
+  color: #fff;
+}
+
+.composer-file-error {
+  position: relative;
+  z-index: 2;
+  margin: 0 4px 7px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255,100,145,.24);
+  border-radius: 10px;
+  background: rgba(88,18,45,.20);
+  color: #ffb7cc;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+@media (max-width: 600px) {
+  .composer-file-item {
+    min-width: 170px;
+    max-width: 205px;
+  }
+
+  .composer-file-info strong {
+    max-width: 125px;
+  }
+}
+
 /* Upload composer polish: keep the menu floating outside the composer and center the plus icon. */
 .composer {
   overflow: visible;
