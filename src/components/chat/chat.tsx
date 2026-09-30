@@ -2120,10 +2120,154 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     }
   }
 
+  function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    setFilePickerOpen(false);
+
+    if (selected.length === 0) return;
+
+    if (editingMessageId) {
+      setFileUploadError("Attachments can only be added to a new message.");
+      return;
+    }
+
+    if (pendingFiles.length + selected.length > MAX_CHAT_FILES_PER_MESSAGE) {
+      setFileUploadError(`You can upload up to ${MAX_CHAT_FILES_PER_MESSAGE} files with one prompt.`);
+      return;
+    }
+
+    const invalid = selected.find((file) => {
+      return !ALLOWED_FILE_EXTENSIONS.has(getFileExtension(file.name));
+    });
+
+    if (invalid) {
+      setFileUploadError(`Unsupported file type: ${invalid.name}`);
+      return;
+    }
+
+    const tooLarge = selected.find((file) => {
+      const category = getFileLimitCategory(file);
+      return file.size > FILE_SIZE_LIMITS[category];
+    });
+
+    if (tooLarge) {
+      const category = getFileLimitCategory(tooLarge);
+      setFileUploadError(
+        `${tooLarge.name} is too large. Maximum for this file type is ${formatFileLimit(FILE_SIZE_LIMITS[category])}.`
+      );
+      return;
+    }
+
+    setPendingFiles((current) => [...current, ...selected]);
+    setFileUploadError("");
+  }
+
+  function removePendingFile(index: number) {
+    if (isLoading) return;
+    setPendingFiles((current) =>
+      current.filter((_, currentIndex) => currentIndex !== index)
+    );
+    setFileUploadError("");
+  }
+
+  function openFilePicker() {
+    if (isLoading || editingMessageId) return;
+
+    setFileUploadError("");
+    setFilePickerOpen((current) => !current);
+    window.setTimeout(() => fileInputRef.current?.click(), 0);
+  }
+
+  async function uploadChatFiles(
+    userId: string,
+    chatId: string,
+    messageId: string,
+    files: File[]
+  ): Promise<ChatAttachment[]> {
+    if (files.length === 0) return [];
+
+    const uploadedPaths: string[] = [];
+
+    try {
+      const results: ChatAttachment[] = [];
+
+      for (const file of files) {
+        const safeName =
+          file.name
+            .replace(/[^a-zA-Z0-9._-]+/g, "-")
+            .replace(/-+/g, "-")
+            .slice(0, 120) || "file";
+
+        const storagePath = `${userId}/${chatId}/${crypto.randomUUID()}-${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("chat-files")
+          .upload(storagePath, file, {
+            upsert: false,
+            contentType: file.type || "application/octet-stream"
+          });
+
+        if (uploadError) throw uploadError;
+        uploadedPaths.push(storagePath);
+
+        const { data: attachment, error: attachmentError } = await supabase
+          .from("chat_attachments")
+          .insert({
+            user_id: userId,
+            chat_id: chatId,
+            message_id: messageId,
+            file_name: file.name,
+            mime_type: file.type || "application/octet-stream",
+            size_bytes: file.size,
+            storage_path: storagePath
+          })
+          .select("id,chat_id,message_id,file_name,mime_type,size_bytes,storage_path,created_at")
+          .single();
+
+        if (attachmentError) throw attachmentError;
+
+        results.push({
+          id: attachment.id,
+          chatId: attachment.chat_id,
+          messageId: attachment.message_id,
+          fileName: attachment.file_name,
+          mimeType: attachment.mime_type,
+          sizeBytes: Number(attachment.size_bytes),
+          storagePath: attachment.storage_path,
+          createdAt: new Date(attachment.created_at).getTime()
+        });
+      }
+
+      return results;
+    } catch (error) {
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from("chat-files").remove(uploadedPaths);
+      }
+
+      await supabase
+        .from("chat_attachments")
+        .delete()
+        .eq("message_id", messageId)
+        .eq("user_id", userId);
+
+      await supabase
+        .from("chat_messages")
+        .delete()
+        .eq("id", messageId)
+        .eq("user_id", userId);
+
+      throw error;
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const content = input.trim();
+    const content =
+      input.trim() ||
+      (pendingFiles.length > 0 ? "Please analyze the attached file(s)." : "");
+
     if (!content || isLoading || !activeSession) return;
 
     stopReadAloud();
@@ -2279,15 +2423,27 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       if (messageError) throw messageError;
 
+      const filesForMessage = [...pendingFiles];
+      const uploadedChatAttachments = await uploadChatFiles(
+        user.id,
+        activeSession.id,
+        savedUserMessage.id,
+        filesForMessage
+      );
+
       const nextMessages: ChatMessage[] = [
         ...activeSession.messages,
         {
           id: savedUserMessage.id,
           role: "user",
           content,
+          attachments: uploadedChatAttachments,
           createdAt: new Date(savedUserMessage.created_at).getTime()
         }
       ];
+
+      setPendingFiles([]);
+      setFileUploadError("");
 
       await supabase
         .from("chat_sessions")
