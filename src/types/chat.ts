@@ -6,7 +6,6 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   createdAt?: number;
-  attachments?: ChatAttachment[];
 }
 
 export interface ChatSession {
