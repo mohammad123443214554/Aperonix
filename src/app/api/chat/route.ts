@@ -346,8 +346,9 @@ export async function POST(request: Request) {
           created_at: branchMessage.created_at
         }
       ].map((message) => ({
+        id: message.id,
         role: message.role as "user" | "assistant",
-        content: message.content
+        content: String(message.content)
       }));
 
       effectiveMessages = [...branchContext, ...sanitizedMessages].slice(-40);
