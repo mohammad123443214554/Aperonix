@@ -248,7 +248,7 @@ button:disabled { cursor: not-allowed; }
 }
 
 .composer-upload-wrap {
-  position: relative;
+  position: static;
   flex: 0 0 auto;
 }
 
@@ -472,6 +472,8 @@ button:disabled { cursor: not-allowed; }
 .composer, .composer-note { width: min(900px, 100%); margin: 0 auto; }
 
 .composer {
+  position: relative;
+  overflow: visible;
   display: flex;
   align-items: flex-end;
   gap: 9px;
@@ -480,6 +482,26 @@ button:disabled { cursor: not-allowed; }
   border-radius: 17px;
   background: rgba(3, 10, 24, 0.96);
   box-shadow: 0 12px 42px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(33, 76, 129, 0.05);
+}
+
+
+
+/* File attachments expand the composer vertically; keep the message field and toolbar in a clean stack. */
+.composer.has-files {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.composer.has-files .composer-file-area,
+.composer.has-files .composer-file-error,
+.composer.has-files textarea,
+.composer.has-files .composer-toolbar {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.composer.has-files textarea {
+  min-height: 42px;
 }
 
 .composer:focus-within {
