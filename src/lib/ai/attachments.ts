@@ -144,7 +144,7 @@ async function processPdfFile(attachment: AttachmentRow, url: string) {
     }
 
     const result = await extractText(pdf, { mergePages: true });
-    const text = typeof result.text === "string" ? result.text : result.text.join("\n\n");
+    const text = String(result.text ?? "");
     return limitText(text);
   } finally {
     await pdf.destroy();
