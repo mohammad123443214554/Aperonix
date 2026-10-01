@@ -702,6 +702,75 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     return userId + "/" + chatId + "/" + uniqueName + (extension ? "." + extension : "");
   }
 
+
+  async function optimizeImageForUpload(file: File): Promise<File> {
+    const type = file.type.toLowerCase();
+
+    // Step 7 intentionally optimizes only large JPEG images.
+    // PNG/GIF/WebP/HEIC and other image formats are kept untouched so
+    // transparency, animation, or browser compatibility is not changed.
+    const MIN_SIZE_TO_OPTIMIZE = 4 * 1024 * 1024;
+    const MAX_DIMENSION = 2560;
+    const JPEG_QUALITY = 0.82;
+
+    if (
+      !type.startsWith("image/") ||
+      type !== "image/jpeg" ||
+      file.size <= MIN_SIZE_TO_OPTIMIZE
+    ) {
+      return file;
+    }
+
+    if (typeof window === "undefined" || typeof createImageBitmap !== "function") {
+      return file;
+    }
+
+    try {
+      const bitmap = await createImageBitmap(file);
+      const longestSide = Math.max(bitmap.width, bitmap.height);
+      const scale = longestSide > MAX_DIMENSION ? MAX_DIMENSION / longestSide : 1;
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+
+      if (width === bitmap.width && height === bitmap.height && file.size <= 5 * 1024 * 1024) {
+        bitmap.close();
+        return file;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        bitmap.close();
+        return file;
+      }
+
+      context.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY)
+      );
+
+      canvas.width = 1;
+      canvas.height = 1;
+
+      if (!blob || blob.size >= file.size * 0.9) {
+        return file;
+      }
+
+      return new File([blob], file.name, {
+        type: "image/jpeg",
+        lastModified: file.lastModified
+      });
+    } catch (error) {
+      console.warn("Image optimization skipped:", error);
+      return file;
+    }
+  }
+
   async function uploadFileToStorage(
     file: File,
     userId: string,
@@ -2552,17 +2621,42 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             throw new Error("UPLOAD_CANCELLED");
           }
 
-          const file = selectedFiles[index];
+          const originalFile = selectedFiles[index];
+          let file = originalFile;
+
           setUploadFileStates((current) => ({ ...current, [index]: "uploading" }));
           setFileUploadStatus(
-            "Uploading " +
+            "Preparing " +
               (index + 1) +
               "/" +
               selectedFiles.length +
               ": " +
-              file.name
+              originalFile.name
           );
           setFileUploadProgress(0);
+
+          file = await optimizeImageForUpload(originalFile);
+
+          if (file.size < originalFile.size) {
+            setFileUploadStatus(
+              "Optimized " +
+                originalFile.name +
+                " (" +
+                formatFileSize(originalFile.size) +
+                " → " +
+                formatFileSize(file.size) +
+                ")"
+            );
+          } else {
+            setFileUploadStatus(
+              "Uploading " +
+                (index + 1) +
+                "/" +
+                selectedFiles.length +
+                ": " +
+                originalFile.name
+            );
+          }
 
           const uploaded = await uploadFileToStorage(
             file,
