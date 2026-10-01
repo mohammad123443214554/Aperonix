@@ -484,9 +484,12 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error ? error.message : "Unknown server error.";
 
-    if (message === "GROQ_API_KEY is not configured.") {
+    if (
+      message === "GROQ_API_KEY is not configured." ||
+      message === "TWELVELABS_API_KEY is not configured."
+    ) {
       return NextResponse.json(
-        { error: "GROQ_API_KEY is not configured." },
+        { error: message },
         { status: 500 }
       );
     }
