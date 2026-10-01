@@ -511,8 +511,18 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         const requestedId = requestedMatch
           ? decodeURIComponent(requestedMatch[1])
           : null;
-        const requestedSession = requestedId
-          ? loaded.find((session) => session.id === requestedId)
+        let rememberedId: string | null = null;
+        if (!requestedId) {
+          try {
+            rememberedId = window.sessionStorage.getItem("aperonix-active-chat");
+          } catch {
+            rememberedId = null;
+          }
+        }
+
+        const activeChatId = requestedId ?? rememberedId;
+        const requestedSession = activeChatId
+          ? loaded.find((session) => session.id === activeChatId)
           : null;
 
         async function loadMessagesForSession(session: ChatSession) {
@@ -631,13 +641,29 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         if (requestedSession) {
           setSessions(loaded);
           setActiveSessionId(requestedSession.id);
+
+          try {
+            window.sessionStorage.setItem("aperonix-active-chat", requestedSession.id);
+          } catch {
+            // Ignore storage errors.
+          }
+
+          if (window.location.pathname !== `/chat/${requestedSession.id}`) {
+            navigate(`/chat/${requestedSession.id}`, true);
+          }
+
           await loadMessagesForSession(requestedSession);
         } else {
-          // /chat is always a fresh, temporary composer. It is not inserted
-          // into Supabase or shown in history until the first message is sent.
+          // /chat is a genuinely fresh chat only when there is no remembered
+          // active chat in this browser session.
           const fresh = createLocalSession();
           setSessions([...loaded, fresh]);
           setActiveSessionId(fresh.id);
+          try {
+            window.sessionStorage.removeItem("aperonix-active-chat");
+          } catch {
+            // Ignore storage errors.
+          }
           if (window.location.pathname !== "/chat") {
             navigate("/chat", true);
           }
@@ -1113,6 +1139,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     stopReadAloud();
     forceScrollToBottomRef.current = true;
     setActiveSessionId(id);
+    try {
+      window.sessionStorage.setItem("aperonix-active-chat", id);
+    } catch {
+      // Ignore storage errors.
+    }
     setOpenMenuId(null);
     setIsSidebarOpen(false);
     navigate(`/chat/${id}`);
@@ -1240,6 +1271,14 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   async function handleNewChat() {
     if (isLoading) return;
     stopReadAloud();
+
+    // Explicit New Chat clears the remembered conversation so a later UI
+    // remount starts from this new composer.
+    try {
+      window.sessionStorage.removeItem("aperonix-active-chat");
+    } catch {
+      // Ignore storage errors.
+    }
 
     // A fresh chat is temporary. It is not written to Supabase or history
     // until the user sends the first message.
