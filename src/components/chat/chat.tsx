@@ -363,6 +363,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLElement | null>(null);
   const forceScrollToBottomRef = useRef(false);
+  const pendingBottomChatIdRef = useRef<string | null>(null);
   const scrollRestorePendingRef = useRef(false);
 
   const scrollPositionStorageKey = (chatId: string) =>
@@ -605,6 +606,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             )
           );
 
+          if (pendingBottomChatIdRef.current === session.id) {
+            pendingBottomChatIdRef.current = null;
+            forceScrollToBottomRef.current = true;
+          }
+
           const assistantMessageIds = messageRows
             .filter((message) => message.role === "assistant")
             .map((message) => message.id);
@@ -692,7 +698,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }, []);
 
   useEffect(() => {
-    if (sessions.length === 0) return;
+    if (sessions.length === 0 || isHistoryLoading) return;
 
     const chatMatch = pathname.match(/^\/chat\/([^/]+)$/);
     if (chatMatch) {
@@ -1089,7 +1095,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
   useEffect(() => {
     const element = messagesScrollRef.current;
-    if (!element || !activeSession?.id) return;
+    if (!element || !activeSession?.id || isHistoryLoading) return;
+
+    const shouldWaitForSelectedChat =
+      pendingBottomChatIdRef.current === activeSession.id &&
+      messages.length === 0;
+
+    if (shouldWaitForSelectedChat) return;
 
     const frame = window.requestAnimationFrame(() => {
       if (forceScrollToBottomRef.current) {
@@ -1137,7 +1149,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     if (!session || session.isPersisted === false) return;
 
     stopReadAloud();
-    forceScrollToBottomRef.current = true;
+    if (session.messages.length === 0) {
+      pendingBottomChatIdRef.current = id;
+    } else {
+      forceScrollToBottomRef.current = true;
+    }
     setActiveSessionId(id);
     try {
       window.sessionStorage.setItem("aperonix-active-chat", id);
@@ -1231,6 +1247,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           )
         );
 
+        if (pendingBottomChatIdRef.current === id) {
+          pendingBottomChatIdRef.current = null;
+          forceScrollToBottomRef.current = true;
+        }
+
         const assistantMessageIds = messageRows
           .filter((message) => message.role === "assistant")
           .map((message) => message.id);
@@ -1283,6 +1304,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     // A fresh chat is temporary. It is not written to Supabase or history
     // until the user sends the first message.
     const next = createLocalSession();
+
+    pendingBottomChatIdRef.current = null;
+    forceScrollToBottomRef.current = true;
 
     setSessions((current) => [
       ...current.filter((session) => session.isPersisted !== false),
