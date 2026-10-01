@@ -284,7 +284,10 @@ async function analyzeWithGenerateContent(
                 file_data: {
                   file_uri: file.uri,
                   mime_type: mimeType
-                }
+                },
+                ...(processing === "agentic"
+                  ? { media_processing: "AGENTIC" }
+                  : {})
               },
               {
                 text: prompt
@@ -298,15 +301,7 @@ async function analyzeWithGenerateContent(
             thinkingLevel: "low"
           }
         },
-        ...(processing === "agentic"
-          ? {
-              // Gemini's GenerateContent API accepts the same agentic
-              // video-processing mode for supported Gemini 3.x Flash models.
-              videoMetadata: {
-                fps: 1
-              }
-            }
-          : {})
+
       })
     }
   );
