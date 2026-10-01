@@ -167,8 +167,15 @@ export async function POST(request: Request) {
     const requestedAttachmentIds = Array.isArray(body.attachmentIds)
       ? body.attachmentIds.filter(
           (id): id is string => typeof id === "string" && id.length > 0
-        ).slice(0, 20)
+        ).slice(0, 5)
       : [];
+
+    if (Array.isArray(body.attachmentIds) && body.attachmentIds.length > 5) {
+      return NextResponse.json(
+        { error: "A maximum of 5 attachments can be processed per request." },
+        { status: 400 }
+      );
+    }
 
     if (requestedChatId) {
       const { data: ownedChat, error: ownedChatError } = await authClient
