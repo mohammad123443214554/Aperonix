@@ -3,7 +3,7 @@ const GEMINI_UPLOAD_BASE =
   "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
 const GEMINI_VIDEO_MODEL =
-  process.env.GEMINI_VIDEO_MODEL || "gemini-3-flash-preview";
+  process.env.GEMINI_VIDEO_MODEL || "gemini-3.8-flash";
 
 const MAX_ANALYSIS_CHARS = 50_000;
 const FILE_PROCESSING_TIMEOUT_MS = 240_000;
@@ -284,6 +284,70 @@ async function analyzeWithGemini(
     : text;
 }
 
+
+async function analyzeWithLegacyGenerateContent(
+  file: GeminiFile,
+  mimeType: string,
+  prompt: string
+) {
+  const apiKey = getGeminiApiKey();
+
+  const response = await fetch(
+    `${GEMINI_API_BASE}/models/${GEMINI_VIDEO_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: prompt
+              },
+              {
+                file_data: {
+                  file_uri: file.uri,
+                  mime_type: mimeType
+                }
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 7000,
+          thinkingConfig: {
+            thinkingLevel: "LOW"
+          }
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await readGeminiError(response));
+  }
+
+  const payload = await response.json();
+  const text = String(
+    payload?.candidates?.[0]?.content?.parts
+      ?.map((part: any) => part?.text || "")
+      .join("") || ""
+  ).trim();
+
+  if (!text) {
+    throw new Error("Gemini legacy video analysis returned no text.");
+  }
+
+  return text.length > MAX_ANALYSIS_CHARS
+    ? text.slice(0, MAX_ANALYSIS_CHARS).trimEnd() +
+        "\n[Video analysis truncated for context size.]"
+    : text;
+}
+
 export async function analyzeVideoWithGemini(input: {
   bytes: Uint8Array;
   mimeType: string;
@@ -297,7 +361,83 @@ export async function analyzeVideoWithGemini(input: {
 
   try {
     const activeFile = await waitForGeminiFile(uploaded.name!);
-    return await analyzeWithGemini(activeFile, input.mimeType);
+
+    const durationSeconds = parseVideoDuration(
+      activeFile.metadata?.videoMetadata?.videoDuration
+    );
+    const processing =
+      durationSeconds > 0 && durationSeconds <= 300
+        ? "static"
+        : "agentic";
+
+    const prompt = [
+      "Analyze this entire video for Aperonix AI.",
+      "You must use both the visual stream and audio when available.",
+      "Return factual reference material for another AI that will answer the user's question.",
+      "Describe the overall video, important events in chronological order, scene changes, people, objects, actions, locations, visible text, screens, demonstrations, dialogue, narration, meaningful sounds, and useful timestamps.",
+      "Do not invent details. Clearly mark uncertainty.",
+      "Most importantly, actually analyze the visual content of the video. Do not say that you cannot see or analyze the video.",
+      "Keep the result detailed but non-repetitive."
+    ].join("\n");
+
+    try {
+      const apiKey = getGeminiApiKey();
+      const response = await fetch(`${GEMINI_API_BASE}/interactions`, {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: GEMINI_VIDEO_MODEL,
+          store: false,
+          input: [
+            {
+              type: "video",
+              uri: activeFile.uri,
+              mime_type: activeFile.mimeType || input.mimeType,
+              processing
+            },
+            {
+              type: "text",
+              text: prompt
+            }
+          ],
+          generation_config: {
+            max_output_tokens: 7000,
+            thinking_level: "low"
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readGeminiError(response));
+      }
+
+      const payload = await response.json();
+      const text = extractInteractionText(payload);
+
+      if (!text) {
+        throw new Error("Gemini returned no video analysis.");
+      }
+
+      return text.length > MAX_ANALYSIS_CHARS
+        ? text.slice(0, MAX_ANALYSIS_CHARS).trimEnd() +
+            "\n[Video analysis truncated for context size.]"
+        : text;
+    } catch (interactionError) {
+      console.error("Aperonix Gemini Interactions video analysis failed:", interactionError);
+
+      // The same uploaded Gemini File can also be consumed through the
+      // generateContent endpoint. This is a second provider-side path, not
+      // another upload, so a transient Interactions API problem does not make
+      // the whole video feature fail.
+      return await analyzeWithLegacyGenerateContent(
+        activeFile,
+        activeFile.mimeType || input.mimeType,
+        prompt
+      );
+    }
   } finally {
     await deleteGeminiFile(uploaded.name!);
   }
