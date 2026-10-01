@@ -281,6 +281,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const [fileSelectionError, setFileSelectionError] = useState("");
   const [fileUploadProgress, setFileUploadProgress] = useState(0);
   const [fileUploadStatus, setFileUploadStatus] = useState("");
+  const [uploadFileStates, setUploadFileStates] = useState<Record<number, "queued" | "uploading" | "uploaded" | "error">>({});
+  const [isUploadCancellable, setIsUploadCancellable] = useState(false);
+  const uploadCancelRef = useRef<(() => void) | null>(null);
+  const uploadCancelledRef = useRef(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -708,6 +712,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     const storagePath = createStoragePath(userId, chatId, file);
     const contentType = file.type || "application/octet-stream";
 
+    uploadCancelRef.current = null;
+    setIsUploadCancellable(false);
+
     if (file.size <= RESUMABLE_UPLOAD_THRESHOLD) {
       const { error } = await supabase.storage
         .from(APERONIX_FILES_BUCKET)
@@ -770,10 +777,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           },
           onSuccess: () => {
             onProgress(100);
+            uploadCancelRef.current = null;
+            setIsUploadCancellable(false);
             resolve();
           }
         });
 
+        uploadCancelRef.current = () => {
+          upload.abort();
+        };
+        setIsUploadCancellable(true);
         upload.start();
       });
     }
@@ -799,10 +812,37 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       throw metadataError ?? new Error("Could not save file metadata.");
     }
 
+    uploadCancelRef.current = null;
+    setIsUploadCancellable(false);
+
     return {
       id: data.id as string,
       storagePath: data.storage_path as string
     };
+  }
+
+  function cancelActiveFileUpload() {
+    uploadCancelledRef.current = true;
+    uploadCancelRef.current?.();
+    uploadCancelRef.current = null;
+    setIsUploadCancellable(false);
+    setFileUploadStatus("Upload cancelled.");
+    setFileUploadProgress(0);
+  }
+
+  function getFileTypeLabel(file: File) {
+    const type = file.type.toLowerCase();
+    const extension = getStorageExtension(file);
+
+    if (type.startsWith("image/")) return "IMG";
+    if (type.startsWith("video/")) return "VID";
+    if (type.startsWith("audio/")) return "AUD";
+    if (type === "application/pdf" || extension === "pdf") return "PDF";
+    if (type.includes("word") || ["doc", "docx"].includes(extension)) return "DOC";
+    if (type.includes("spreadsheet") || type.includes("excel") || ["xls", "xlsx", "csv"].includes(extension)) return "XLS";
+    if (type.includes("presentation") || type.includes("powerpoint") || ["ppt", "pptx"].includes(extension)) return "PPT";
+    if (type.startsWith("text/") || ["txt", "md", "json", "xml", "js", "ts", "py"].includes(extension)) return "TXT";
+    return "FILE";
   }
 
   async function deleteUploadedFile(storagePath: string, metadataId: string) {
@@ -868,6 +908,15 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   function removeSelectedFile(index: number) {
     if (isLoading) return;
     setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+    setUploadFileStates((current) => {
+      const next: Record<number, "queued" | "uploading" | "uploaded" | "error"> = {};
+      Object.entries(current).forEach(([key, value]) => {
+        const oldIndex = Number(key);
+        if (oldIndex < index) next[oldIndex] = value;
+        if (oldIndex > index) next[oldIndex - 1] = value;
+      });
+      return next;
+    });
     setFileSelectionError("");
     setFileUploadStatus("");
     setFileUploadProgress(0);
@@ -2493,8 +2542,18 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       }
 
       if (selectedFiles.length > 0) {
+        uploadCancelledRef.current = false;
+        setUploadFileStates(
+          Object.fromEntries(selectedFiles.map((_, index) => [index, "queued"])) as Record<number, "queued" | "uploading" | "uploaded" | "error">
+        );
+
         for (let index = 0; index < selectedFiles.length; index += 1) {
+          if (uploadCancelledRef.current) {
+            throw new Error("UPLOAD_CANCELLED");
+          }
+
           const file = selectedFiles[index];
+          setUploadFileStates((current) => ({ ...current, [index]: "uploading" }));
           setFileUploadStatus(
             "Uploading " +
               (index + 1) +
@@ -2515,8 +2574,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
           uploadedFilesForPrompt.push(uploaded);
           uploadedOriginalFilesForPrompt.push(uploaded);
+          setUploadFileStates((current) => ({ ...current, [index]: "uploaded" }));
         }
 
+        setIsUploadCancellable(false);
         setFileUploadStatus("Files uploaded successfully.");
         setFileUploadProgress(100);
       }
@@ -2569,7 +2630,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       );
 
       attachmentsCommitted = true;
+      uploadCancelRef.current = null;
+      setIsUploadCancellable(false);
       setSelectedFiles([]);
+      setUploadFileStates({});
       setFileSelectionError("");
       setFileUploadStatus("");
       setFileUploadProgress(0);
@@ -2679,6 +2743,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         )
       );
     } catch (error) {
+      if (uploadCancelledRef.current || (error instanceof Error && error.message === "UPLOAD_CANCELLED")) {
+        console.info("Aperonix file upload cancelled by user.");
+        setFileUploadStatus("Upload cancelled. Your selected files are still here.");
+        setFileUploadProgress(0);
+        setIsUploadCancellable(false);
+        uploadCancelRef.current = null;
+        uploadCancelledRef.current = false;
+        return;
+      }
+
       console.error("Aperonix chat error:", error);
 
       if (!attachmentsCommitted && uploadedFilesForPrompt.length > 0) {
@@ -2692,7 +2766,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       if (uploadedFilesForPrompt.length > 0) {
         setFileUploadStatus("");
         setFileUploadProgress(0);
+        setUploadFileStates({});
       }
+      setIsUploadCancellable(false);
+      uploadCancelRef.current = null;
 
       if (editingMessageId) {
         setInput(content);
@@ -3356,27 +3433,38 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 </div>
 
                 <div className="composer-file-list">
-                  {selectedFiles.map((file, index) => (
-                    <div
-                      className="composer-file-item"
-                      key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-                    >
-                      <div className="composer-file-icon" aria-hidden="true">↗</div>
-                      <div className="composer-file-info">
-                        <strong title={file.name}>{file.name}</strong>
-                        <span>{formatFileSize(file.size)}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="composer-file-remove"
-                        onClick={() => removeSelectedFile(index)}
-                        aria-label={`Remove ${file.name}`}
-                        title="Remove file"
+                  {selectedFiles.map((file, index) => {
+                    const state = uploadFileStates[index] ?? "queued";
+                    const stateLabel = state === "uploading" ? "Uploading…" : state === "uploaded" ? "Uploaded" : state === "error" ? "Failed" : "Ready";
+
+                    return (
+                      <div
+                        className={`composer-file-item ${state === "uploading" ? "is-uploading" : ""} ${state === "uploaded" ? "is-uploaded" : ""} ${state === "error" ? "is-error" : ""}`}
+                        key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
                       >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                        <div className="composer-file-icon" aria-hidden="true">{getFileTypeLabel(file)}</div>
+                        <div className="composer-file-info">
+                          <strong title={file.name}>{file.name}</strong>
+                          <span>{formatFileSize(file.size)} · {stateLabel}</span>
+                          {state === "uploading" && (
+                            <div className="composer-file-progress" aria-hidden="true">
+                              <span style={{ width: `${fileUploadProgress}%` }} />
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="composer-file-remove"
+                          onClick={() => removeSelectedFile(index)}
+                          disabled={isLoading}
+                          aria-label={`Remove ${file.name}`}
+                          title="Remove file"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -3390,7 +3478,19 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             {fileUploadStatus && (
               <div className="composer-file-upload-status" role="status" aria-live="polite">
                 <span>{fileUploadStatus}</span>
-                <strong>{fileUploadProgress}%</strong>
+                <div className="composer-upload-status-right">
+                  {fileUploadProgress > 0 && <strong>{fileUploadProgress}%</strong>}
+                  {isUploadCancellable && (
+                    <button
+                      type="button"
+                      className="composer-upload-cancel"
+                      onClick={cancelActiveFileUpload}
+                      disabled={!isLoading}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
