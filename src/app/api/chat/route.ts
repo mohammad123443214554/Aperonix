@@ -9,6 +9,7 @@ import {
 import type { ChatMessage } from "@/types/chat";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 function cleanGeneratedTitle(value: string, fallback: string) {
   const cleaned = value
@@ -307,7 +308,7 @@ export async function POST(request: Request) {
         let attachmentQuery = authClient
           .from("aperonix_files")
           .select(
-            "id,message_id,parent_file_id,frame_timestamp_ms,original_name,storage_path,mime_type,size_bytes,status"
+            "id,message_id,parent_file_id,frame_timestamp_ms,video_analysis,video_analysis_at,original_name,storage_path,mime_type,size_bytes,status"
           )
           .eq("user_id", authData.user.id)
           .eq("status", "ready")
@@ -331,7 +332,7 @@ export async function POST(request: Request) {
         // text, images and video audio without making the whole chat fail.
         if (
           attachmentError &&
-          /parent_file_id|frame_timestamp_ms/i.test(
+          /parent_file_id|frame_timestamp_ms|video_analysis|video_analysis_at/i.test(
             String(attachmentError.message ?? "")
           )
         ) {
