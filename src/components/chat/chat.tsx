@@ -2544,50 +2544,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             (percentage) => setFileUploadProgress(percentage)
           );
 
-          uploadedFilesForPrompt.push(uploaded);
-          uploadedOriginalFilesForPrompt.push(uploaded);
-
-          if (
-            file.type.toLowerCase().startsWith("video/") &&
-            uploaded.supportsVideoFrames
-          ) {
-            setFileUploadStatus(
-              "Preparing 3 visual frames for Aperonix: " + file.name
-            );
-            setFileUploadProgress(0);
-
-            const frames = await extractVideoFrames(file, 3);
-
-            for (let frameIndex = 0; frameIndex < frames.length; frameIndex += 1) {
-              const frame = frames[frameIndex];
-
-              setFileUploadStatus(
-                "Uploading video frame " +
-                  (frameIndex + 1) +
-                  "/" +
-                  frames.length +
-                  ": " +
-                  file.name
-              );
-              setFileUploadProgress(0);
-
-              const uploadedFrame = await uploadFileToStorage(
-                frame.file,
-                user.id,
-                activeSession.id,
-                accessToken,
-                (percentage) => setFileUploadProgress(percentage),
-                {
-                  parentFileId: uploaded.id,
-                  frameTimestampMs: frame.timestampMs
-                }
-              );
-
-              uploadedFilesForPrompt.push(uploadedFrame);
-            }
-          }
-        }
-
         setFileUploadStatus("Files uploaded successfully.");
         setFileUploadProgress(100);
       }
