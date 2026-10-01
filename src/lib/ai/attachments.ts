@@ -2,6 +2,7 @@ import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
 
 import { getGroqClient } from "./groq";
+import { analyzeVideoWithGemini } from "./gemini-video";
 
 const BUCKET = "aperonix-files";
 const SIGNED_URL_SECONDS = 10 * 60;
@@ -16,6 +17,8 @@ type AttachmentRow = {
   message_id: string | null;
   parent_file_id: string | null;
   frame_timestamp_ms: number | null;
+  video_analysis?: string | null;
+  video_analysis_at?: string | null;
   original_name: string;
   storage_path: string;
   mime_type: string;
@@ -230,77 +233,95 @@ async function processVideo(
   frameAttachments: AttachmentRow[],
   supabase: any
 ) {
-  const parts: string[] = [];
+  if (attachment.video_analysis?.trim()) {
+    return attachment.video_analysis.trim();
+  }
 
   try {
-    const transcript = await processAudioOrVideo(url);
-    parts.push("Audio/speech transcript:\n" + transcript);
+    const bytes = await downloadBytes(url);
+    const analysis = await analyzeVideoWithGemini({
+      bytes,
+      mimeType: attachment.mime_type || "video/mp4",
+      fileName: attachment.original_name
+    });
+
+    const { error: cacheError } = await supabase
+      .from("aperonix_files")
+      .update({
+        video_analysis: analysis,
+        video_analysis_at: new Date().toISOString()
+      })
+      .eq("id", attachment.id);
+
+    if (cacheError) {
+      console.error("Aperonix video analysis cache error:", cacheError);
+    }
+
+    return analysis;
   } catch (error) {
-    console.error("Aperonix video transcription error:", {
+    console.error("Aperonix Gemini video analysis error:", {
       attachmentId: attachment.id,
       name: attachment.original_name,
       error
     });
-    parts.push("Audio/speech could not be transcribed from this video.");
+
+    const parts: string[] = [];
+
+    try {
+      const transcript = await processAudioOrVideo(url);
+      parts.push("Audio/speech transcript:\n" + transcript);
+    } catch (transcriptionError) {
+      console.error("Aperonix video transcription fallback error:", {
+        attachmentId: attachment.id,
+        error: transcriptionError
+      });
+      parts.push("Audio/speech could not be transcribed from this video.");
+    }
+
+    const frames = frameAttachments
+      .filter((frame) => frame.parent_file_id === attachment.id)
+      .sort(
+        (a, b) =>
+          Number(a.frame_timestamp_ms ?? 0) -
+          Number(b.frame_timestamp_ms ?? 0)
+      )
+      .slice(0, 3);
+
+    if (frames.length > 0) {
+      try {
+        const frameData = await Promise.all(
+          frames.map(async (frame) => ({
+            frame,
+            url: await signedUrlFor(supabase, frame.storage_path)
+          }))
+        );
+
+        const visual = await processImages(
+          frameData.map((item) => item.url),
+          "Analyze these representative frames from an uploaded video. " +
+            "Describe only clearly visible visual details, readable text, scenes, objects, people, actions, and UI. " +
+            "Do not invent details."
+        );
+
+        parts.push("Fallback visual frame analysis:\n" + visual);
+      } catch (frameError) {
+        console.error("Aperonix video frame fallback error:", {
+          attachmentId: attachment.id,
+          error: frameError
+        });
+      }
+    }
+
+    if (parts.length > 0) {
+      return (
+        "Gemini video understanding was temporarily unavailable. " +
+        "The following partial video information was recovered:\n\n" +
+        parts.join("\n\n")
+      );
+    }
+
+    throw error;
   }
-
-  const frames = frameAttachments
-    .filter((frame) => frame.parent_file_id === attachment.id)
-    .sort(
-      (a, b) =>
-        Number(a.frame_timestamp_ms ?? 0) - Number(b.frame_timestamp_ms ?? 0)
-    )
-    .slice(0, 3);
-
-  if (frames.length === 0) {
-    parts.push(
-      "Visual analysis: no extracted video frames are available for this upload."
-    );
-    return parts.join("\n\n");
-  }
-
-  try {
-    const frameData = await Promise.all(
-      frames.map(async (frame) => ({
-        frame,
-        url: await signedUrlFor(supabase, frame.storage_path)
-      }))
-    );
-
-    const visualPrompt =
-      "These are representative frames extracted from an uploaded video. " +
-      "Analyze the visual content across all frames together. Describe what is visibly happening, " +
-      "including people or objects, actions, scenes, on-screen text, UI, colors, and other relevant details. " +
-      "Use the frame timestamps to understand the rough sequence. Do not claim to see motion between frames " +
-      "that is not directly supported. Do not invent details. Return a concise but useful visual summary.";
-
-    const visual = await processImages(
-      frameData.map((item) => item.url),
-      frameData
-        .map(
-          (item, index) =>
-            "Frame " +
-            (index + 1) +
-            " timestamp: " +
-            ((item.frame.frame_timestamp_ms ?? 0) / 1000).toFixed(1) +
-            " seconds."
-        )
-        .join("\n") +
-        "\n\n" +
-        visualPrompt
-    );
-
-    parts.push("Visual frame analysis:\n" + visual);
-  } catch (error) {
-    console.error("Aperonix video visual analysis error:", {
-      attachmentId: attachment.id,
-      name: attachment.original_name,
-      error
-    });
-    parts.push("Visual frame analysis could not be completed for this video.");
-  }
-
-  return parts.join("\n\n");
 }
 
 async function processOne(
