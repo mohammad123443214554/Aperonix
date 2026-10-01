@@ -2,7 +2,7 @@ import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
 
 import { getGroqClient } from "./groq";
-import { analyzeVideoWithGemini } from "./gemini-video";
+import { analyzeVideoWithTwelveLabs } from "./twelve-labs-video";
 
 const BUCKET = "aperonix-files";
 const SIGNED_URL_SECONDS = 10 * 60;
@@ -238,9 +238,8 @@ async function processVideo(
   }
 
   try {
-    const bytes = await downloadBytes(url);
-    const analysis = await analyzeVideoWithGemini({
-      bytes,
+    const analysis = await analyzeVideoWithTwelveLabs({
+      url,
       mimeType: attachment.mime_type || "video/mp4",
       fileName: attachment.original_name
     });
@@ -259,7 +258,7 @@ async function processVideo(
 
     return analysis;
   } catch (error) {
-    console.error("Aperonix Gemini video analysis error:", {
+    console.error("Aperonix Twelve Labs video analysis error:", {
       attachmentId: attachment.id,
       name: attachment.original_name,
       error
@@ -314,7 +313,7 @@ async function processVideo(
 
     if (parts.length > 0) {
       return (
-        "Gemini video understanding was temporarily unavailable. " +
+        "Primary video understanding was temporarily unavailable. " +
         "The following partial video information was recovered:\n\n" +
         parts.join("\n\n")
       );
