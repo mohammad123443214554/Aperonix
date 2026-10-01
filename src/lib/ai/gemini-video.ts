@@ -3,10 +3,11 @@ const GEMINI_UPLOAD_BASE =
   "https://generativelanguage.googleapis.com/upload/v1beta/files";
 
 const GEMINI_VIDEO_MODEL =
-  process.env.GEMINI_VIDEO_MODEL || "gemini-3.8-flash";
+  process.env.GEMINI_VIDEO_MODEL || "gemini-3-flash-preview";
 
 const MAX_ANALYSIS_CHARS = 50_000;
 const FILE_PROCESSING_TIMEOUT_MS = 240_000;
+const GEMINI_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2_000;
 
 type GeminiFile = {
@@ -60,6 +61,12 @@ async function uploadVideoToGemini(
 ) {
   const apiKey = getGeminiApiKey();
 
+  if (bytes.byteLength > GEMINI_UPLOAD_MAX_BYTES) {
+    throw new Error(
+      "This video is larger than the current Gemini processing limit."
+    );
+  }
+
   const startResponse = await fetch(GEMINI_UPLOAD_BASE, {
     method: "POST",
     headers: {
@@ -95,7 +102,7 @@ async function uploadVideoToGemini(
       "Content-Length": String(bytes.byteLength),
       "Content-Type": mimeType
     },
-    body: bytes as BodyInit
+    body: Buffer.from(bytes)
   });
 
   if (!uploadResponse.ok) {
@@ -112,7 +119,6 @@ async function uploadVideoToGemini(
 
   return payload.file;
 }
-
 async function getGeminiFile(fileName: string) {
   const apiKey = getGeminiApiKey();
 
@@ -229,7 +235,8 @@ async function analyzeWithGemini(
     "Do not invent identities, words, events, or details that cannot be supported by the video.",
     "Do not give advice about the video. This is reference material only.",
     "Use timestamps in MM:SS format when they help locate an event.",
-    "Keep the final reference detailed enough for useful follow-up answers, but do not repeat yourself."
+    "Keep the final reference detailed enough for useful follow-up answers, but do not repeat yourself.",
+    "IMPORTANT: Do not say you cannot see, watch, or analyze the video. You are specifically responsible for analyzing its visual content and audio."
   ].join("\n");
 
   const response = await fetch(`${GEMINI_API_BASE}/interactions`, {
