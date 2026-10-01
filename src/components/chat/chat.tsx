@@ -2544,6 +2544,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
             (percentage) => setFileUploadProgress(percentage)
           );
 
+          uploadedFilesForPrompt.push(uploaded);
+          uploadedOriginalFilesForPrompt.push(uploaded);
+        }
+
         setFileUploadStatus("Files uploaded successfully.");
         setFileUploadProgress(100);
       }
