@@ -106,7 +106,8 @@ function createLocalSession(): ChatSession {
     messages: [],
     createdAt: now,
     updatedAt: now,
-    isPinned: false
+    isPinned: false,
+    isPersisted: false
   };
 }
 
@@ -259,6 +260,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   );
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
 
   function navigate(path: string, replace = false) {
     if (typeof window === "undefined") return;
@@ -359,6 +361,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const readAloudBoundaryWordRef = useRef<number | null>(null);
   const readAloudBoundaryTimeRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -452,153 +455,160 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
         if (chatsError) throw chatsError;
 
-        const chatIds = (chats ?? []).map((chat) => chat.id);
-        let messageRows: Array<{
-          id: string;
-          chat_id: string;
-          role: ChatMessage["role"];
-          content: string;
-          created_at: string;
-        }> = [];
-
-        let attachmentRows: Array<{
-          id: string;
-          chat_id: string;
-          message_id: string | null;
-          original_name: string;
-          storage_path: string;
-          mime_type: string;
-          size_bytes: number;
-        }> = [];
-
-        if (chatIds.length > 0) {
-          const { data: rows, error: messagesError } = await supabase
-            .from("chat_messages")
-            .select("id,chat_id,role,content,created_at")
-            .in("chat_id", chatIds)
-            .order("created_at", { ascending: true });
-
-          if (messagesError) throw messagesError;
-          messageRows = rows ?? [];
-
-          const { data: files, error: filesError } = await supabase
-            .from("aperonix_files")
-            .select(
-              "id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes"
-            )
-            .in("chat_id", chatIds)
-            .eq("status", "ready")
-            .order("created_at", { ascending: true });
-
-          if (filesError) throw filesError;
-          attachmentRows = files ?? [];
-        }
-
-        const attachmentUrlEntries = await Promise.all(
-          attachmentRows.map(async (file) => {
-            const { data } = await supabase.storage
-              .from("aperonix-files")
-              .createSignedUrl(file.storage_path, 60 * 60);
-
-            return [
-              file.id,
-              data?.signedUrl ?? ""
-            ] as const;
-          })
-        );
-
-        const attachmentUrls = new Map(attachmentUrlEntries);
-
-        const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
-
-        for (const file of attachmentRows) {
-          if (!file.message_id) continue;
-
-          const attachment: ChatAttachment = {
-            id: file.id,
-            name: file.original_name,
-            sizeBytes: Number(file.size_bytes),
-            mimeType: file.mime_type,
-            storagePath: file.storage_path,
-            url: attachmentUrls.get(file.id) || undefined
-          };
-
-          const current = attachmentsByMessageId.get(file.message_id) ?? [];
-          current.push(attachment);
-          attachmentsByMessageId.set(file.message_id, current);
-        }
-
         const loaded: ChatSession[] = (chats ?? []).map((chat) => ({
           id: chat.id,
           title: chat.title,
-          messages: messageRows
-            .filter((message) => message.chat_id === chat.id)
-            .map(({ id, role, content, created_at }) => ({
+          messages: [],
+          createdAt: new Date(chat.created_at).getTime(),
+          updatedAt: new Date(chat.updated_at).getTime(),
+          isPinned: Boolean(chat.is_pinned),
+          branchFromChatId: chat.branch_from_chat_id ?? null,
+          branchFromMessageId: chat.branch_from_message_id ?? null,
+          isPersisted: true
+        }));
+
+        if (!mounted) return;
+
+        // Only the currently requested chat is hydrated with messages and
+        // attachments. The sidebar gets lightweight session metadata so
+        // opening Aperonix does not download every conversation at once.
+        const requestedMatch = window.location.pathname.match(/^\\/chat\\/([^/]+)$/);
+        const requestedId = requestedMatch
+          ? decodeURIComponent(requestedMatch[1])
+          : null;
+        const requestedSession = requestedId
+          ? loaded.find((session) => session.id === requestedId)
+          : null;
+
+        async function loadMessagesForSession(session: ChatSession) {
+          const { data: rows, error: messagesError } = await supabase
+            .from("chat_messages")
+            .select("id,chat_id,role,content,created_at")
+            .eq("chat_id", session.id)
+            .order("created_at", { ascending: true });
+
+          if (messagesError) throw messagesError;
+
+          const messageRows = rows ?? [];
+          let attachmentRows: Array<{
+            id: string;
+            chat_id: string;
+            message_id: string | null;
+            original_name: string;
+            storage_path: string;
+            mime_type: string;
+            size_bytes: number;
+          }> = [];
+
+          if (messageRows.length > 0) {
+            const { data: files, error: filesError } = await supabase
+              .from("aperonix_files")
+              .select(
+                "id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes"
+              )
+              .eq("chat_id", session.id)
+              .eq("status", "ready")
+              .order("created_at", { ascending: true });
+
+            if (filesError) throw filesError;
+            attachmentRows = files ?? [];
+          }
+
+          const attachmentUrlEntries = await Promise.all(
+            attachmentRows.map(async (file) => {
+              const { data } = await supabase.storage
+                .from("aperonix-files")
+                .createSignedUrl(file.storage_path, 60 * 60);
+
+              return [file.id, data?.signedUrl ?? ""] as const;
+            })
+          );
+
+          const attachmentUrls = new Map(attachmentUrlEntries);
+          const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
+
+          for (const file of attachmentRows) {
+            if (!file.message_id) continue;
+
+            const attachment: ChatAttachment = {
+              id: file.id,
+              name: file.original_name,
+              sizeBytes: Number(file.size_bytes),
+              mimeType: file.mime_type,
+              storagePath: file.storage_path,
+              url: attachmentUrls.get(file.id) || undefined
+            };
+
+            const current = attachmentsByMessageId.get(file.message_id) ?? [];
+            current.push(attachment);
+            attachmentsByMessageId.set(file.message_id, current);
+          }
+
+          const messages: ChatMessage[] = messageRows.map(
+            ({ id, role, content, created_at }) => ({
               id,
               role,
               content,
               createdAt: new Date(created_at).getTime(),
               attachments: attachmentsByMessageId.get(id) ?? []
-            })),
-          createdAt: new Date(chat.created_at).getTime(),
-          updatedAt: new Date(chat.updated_at).getTime(),
-          isPinned: Boolean(chat.is_pinned),
-          branchFromChatId: chat.branch_from_chat_id ?? null,
-          branchFromMessageId: chat.branch_from_message_id ?? null
-        }));
+            })
+          );
 
-        if (!mounted) return;
+          setSessions((current) =>
+            current.map((item) =>
+              item.id === session.id ? { ...item, messages } : item
+            )
+          );
 
-        const assistantMessageIds = messageRows
-          .filter((message) => message.role === "assistant")
-          .map((message) => message.id);
+          const assistantMessageIds = messageRows
+            .filter((message) => message.role === "assistant")
+            .map((message) => message.id);
 
-        if (assistantMessageIds.length > 0) {
-          const { data: feedbackRows, error: feedbackError } = await supabase
-            .from("message_feedback")
-            .select("message_id,feedback")
-            .eq("user_id", user.id)
-            .in("message_id", assistantMessageIds);
+          if (assistantMessageIds.length > 0) {
+            const { data: feedbackRows, error: feedbackError } = await supabase
+              .from("message_feedback")
+              .select("message_id,feedback")
+              .eq("user_id", user.id)
+              .in("message_id", assistantMessageIds);
 
-          if (feedbackError && !/does not exist|relation .*message_feedback/i.test(feedbackError.message)) {
-            console.error("Feedback load error:", feedbackError);
-          }
-
-          if (mounted && feedbackRows) {
-            setFeedbackByMessageId(
-              Object.fromEntries(
-                feedbackRows.map((row) => [row.message_id, row.feedback as FeedbackType])
+            if (
+              feedbackError &&
+              !/does not exist|relation .*message_feedback/i.test(
+                feedbackError.message
               )
-            );
+            ) {
+              console.error("Feedback load error:", feedbackError);
+            }
+
+            if (mounted && feedbackRows) {
+              setFeedbackByMessageId(
+                Object.fromEntries(
+                  feedbackRows.map((row) => [
+                    row.message_id,
+                    row.feedback as FeedbackType
+                  ])
+                )
+              );
+            }
           }
         }
 
-        if (loaded.length > 0) {
+        if (requestedSession) {
           setSessions(loaded);
-          setActiveSessionId(loaded[0].id);
+          setActiveSessionId(requestedSession.id);
+          await loadMessagesForSession(requestedSession);
         } else {
-          const { data: created, error: createError } = await supabase
-            .from("chat_sessions")
-            .insert({ user_id: user.id, title: "New chat" })
-            .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
-            .single();
-
-          if (createError) throw createError;
-
-          const initial: ChatSession = {
-            id: created.id,
-            title: created.title,
-            messages: [],
-            createdAt: new Date(created.created_at).getTime(),
-            updatedAt: new Date(created.updated_at).getTime(),
-            isPinned: Boolean(created.is_pinned),
-            branchFromChatId: created.branch_from_chat_id ?? null,
-            branchFromMessageId: created.branch_from_message_id ?? null
-          };
-
-          setSessions([initial]);
-          setActiveSessionId(initial.id);
+          // /chat is always a fresh, temporary composer. It is not inserted
+          // into Supabase or shown in history until the first message is sent.
+          const fresh = createLocalSession();
+          setSessions([...loaded, fresh]);
+          setActiveSessionId(fresh.id);
+          if (window.location.pathname !== "/chat") {
+            navigate("/chat", true);
+          }
         }
+
+        setIsHistoryLoading(false);
       } catch (error) {
         console.error("Aperonix history load error:", error);
 
@@ -606,6 +616,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         const fallback = createLocalSession();
         setSessions([fallback]);
         setActiveSessionId(fallback.id);
+        setIsHistoryLoading(false);
+        if (window.location.pathname !== "/chat") {
+          navigate("/chat", true);
+        }
       }
     }
 
@@ -626,23 +640,35 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       if (requestedSession) {
         setActiveSessionId(requestedSession.id);
-      } else {
-        const fallback = sessions[0];
-        setActiveSessionId(fallback.id);
-        navigate(`/chat/${fallback.id}`);
+      } else if (!isHistoryLoading) {
+        const fresh = createLocalSession();
+        setSessions((current) => [...current.filter((session) => session.isPersisted !== false), fresh]);
+        setActiveSessionId(fresh.id);
+        navigate("/chat", true);
       }
     } else if (pathname === "/chat") {
-      setActiveSessionId((current) =>
-        sessions.some((session) => session.id === current) ? current : sessions[0].id
-      );
+      const currentSession = sessions.find((session) => session.id === activeSessionId);
+      if (!currentSession || currentSession.isPersisted !== false) {
+        const fresh = createLocalSession();
+        setSessions((current) => [...current.filter((session) => session.isPersisted !== false), fresh]);
+        setActiveSessionId(fresh.id);
+      }
     }
-  }, [pathname, sessions]);
+  }, [pathname, sessions, activeSessionId, isHistoryLoading]);
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
 
   const messages = activeSession?.messages ?? [];
   const isEmptyChat = Boolean(activeSession && messages.length === 0);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSessionId, messages.length]);
 
   const canSend = useMemo(
     () =>
@@ -1028,20 +1054,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       if (error) throw error;
 
-      const next: ChatSession = {
-        id: data.id,
-        title: data.title,
-        messages: [],
-        createdAt: new Date(data.created_at).getTime(),
-        updatedAt: new Date(data.updated_at).getTime(),
-        isPinned: Boolean(data.is_pinned),
-        branchFromChatId: data.branch_from_chat_id ?? null,
-        branchFromMessageId: data.branch_from_message_id ?? null
-      };
+      const next = createLocalSession();
 
-      setSessions((current) => sortSessions([...current, next]));
+      setSessions((current) => [...current.filter((session) => session.isPersisted !== false), next]);
       setActiveSessionId(next.id);
-      navigate(`/chat/${next.id}`);
+      navigate("/chat");
     } catch (error) {
       console.error("New chat error:", error);
     }
@@ -1246,7 +1263,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         updatedAt: new Date(copy.updated_at).getTime(),
         isPinned: false,
         branchFromChatId: copy.branch_from_chat_id ?? null,
-        branchFromMessageId: copy.branch_from_message_id ?? null
+        branchFromMessageId: copy.branch_from_message_id ?? null,
+        isPersisted: true
       };
 
       setSessions((current) => sortSessions([duplicate, ...current]));
@@ -2197,7 +2215,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         updatedAt: new Date(data.updated_at).getTime(),
         isPinned: Boolean(data.is_pinned),
         branchFromChatId: data.branch_from_chat_id ?? activeSession.id,
-        branchFromMessageId: data.branch_from_message_id ?? message.id
+        branchFromMessageId: data.branch_from_message_id ?? message.id,
+        isPersisted: true
       };
 
       setSessions((current) => sortSessions([...current, next]));
@@ -2678,10 +2697,50 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       setInput("");
 
+      let sessionForMessage = activeSession;
+
+      if (activeSession.isPersisted === false) {
+        const { data: createdSession, error: createSessionError } = await supabase
+          .from("chat_sessions")
+          .insert({
+            id: sessionForMessage.id,
+            user_id: user.id,
+            title: "New chat",
+            is_pinned: false,
+            branch_from_chat_id: sessionForMessage.branchFromChatId ?? null,
+            branch_from_message_id: sessionForMessage.branchFromMessageId ?? null
+          })
+          .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
+          .single();
+
+        if (createSessionError) throw createSessionError;
+
+        sessionForMessage = {
+          ...activeSession,
+          title: createdSession.title,
+          createdAt: new Date(createdSession.created_at).getTime(),
+          updatedAt: new Date(createdSession.updated_at).getTime(),
+          isPinned: Boolean(createdSession.is_pinned),
+          branchFromChatId: createdSession.branch_from_chat_id ?? null,
+          branchFromMessageId: createdSession.branch_from_message_id ?? null,
+          isPersisted: true
+        };
+
+        setSessions((current) =>
+          sortSessions(
+            current.map((session) =>
+              session.id === sessionForMessage.id ? sessionForMessage : session
+            )
+          )
+        );
+        setActiveSessionId(sessionForMessage.id);
+        navigate("/chat/" + sessionForMessage.id, true);
+      }
+
       const { data: savedUserMessage, error: messageError } = await supabase
         .from("chat_messages")
         .insert({
-          chat_id: activeSession.id,
+          chat_id: sessionForMessage.id,
           user_id: user.id,
           role: "user",
           content
@@ -2748,11 +2807,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         .update({
           updated_at: new Date().toISOString()
         })
-        .eq("id", activeSession.id);
+        .eq("id", sessionForMessage.id);
 
       setSessions((current) =>
         current.map((session) =>
-          session.id === activeSession.id
+          session.id === sessionForMessage.id
             ? {
                 ...session,
                 messages: nextMessages,
@@ -2771,9 +2830,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         body: JSON.stringify({
           messages: nextMessages,
           aperonixSetting,
-          branchFromChatId: activeSession.branchFromChatId ?? null,
-          branchFromMessageId: activeSession.branchFromMessageId ?? null,
-          chatId: activeSession.id,
+          branchFromChatId: sessionForMessage.branchFromChatId ?? null,
+          branchFromMessageId: sessionForMessage.branchFromMessageId ?? null,
+          chatId: sessionForMessage.id,
           generateTitle:
             activeSession.title === "New chat" &&
             activeSession.messages.length === 0,
@@ -2795,7 +2854,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       const { data: savedAssistantMessage, error: assistantSaveError } = await supabase
         .from("chat_messages")
         .insert({
-          chat_id: activeSession.id,
+          chat_id: sessionForMessage.id,
           user_id: user.id,
           role: "assistant",
           content: assistantMessage.content
@@ -2822,11 +2881,11 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           title: generatedTitle,
           updated_at: new Date().toISOString()
         })
-        .eq("id", activeSession.id);
+        .eq("id", sessionForMessage.id);
 
       setSessions((current) =>
         current.map((session) =>
-          session.id === activeSession.id
+          session.id === sessionForMessage.id
             ? {
                 ...session,
                 title: generatedTitle,
@@ -2945,7 +3004,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               </span>
             </button>
             {isPinnedSectionOpen && <div className="history-list">
-            {sessions.filter((session) => session.isPinned).map((session) => (
+            {sessions.filter((session) => session.isPersisted !== false && session.isPinned).map((session) => (
   <div
                 key={session.id}
                 className={`history-item-wrap ${session.id === activeSession?.id ? "active" : ""}`}
@@ -3035,7 +3094,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               </span>
             </button>
             {isRecentSectionOpen && <div className="history-list">
-            {sessions.filter((session) => !session.isPinned).map((session) => (
+            {sessions.filter((session) => session.isPersisted !== false && !session.isPinned).map((session) => (
   <div
                 key={session.id}
                 className={`history-item-wrap ${session.id === activeSession?.id ? "active" : ""}`}
@@ -3107,7 +3166,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 )}
               </div>
             ))}
-              {sessions.filter((session) => !session.isPinned).length === 0 && (
+              {sessions.filter((session) => session.isPersisted !== false && !session.isPinned).length === 0 && (
                 <div className="history-empty">No recent chats</div>
               )}
             </div>}
@@ -3172,7 +3231,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           </div>
         </header>
 
-        <section className="messages" aria-live="polite">
+        <section className="messages" aria-live="polite" ref={(node) => { messagesScrollRef.current = node; }}>
           <div className="messages-inner">
             {isEmptyChat ? (
               <div className="empty-chat-welcome" aria-label="Aperonix welcome">
