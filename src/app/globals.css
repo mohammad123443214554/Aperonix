@@ -3266,10 +3266,46 @@ body {
   transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
 }
 
-.composer-file-remove:hover {
+.composer-file-remove:hover:not(:disabled) {
   border-color: rgba(255,59,189,.45);
   background: rgba(255,59,189,.07);
   color: #fff;
+}
+
+.composer-file-remove:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.composer-file-item.is-uploading {
+  border-color: rgba(77,246,255,.42);
+  box-shadow: inset 0 0 0 1px rgba(77,246,255,.05), 0 0 18px rgba(77,246,255,.05);
+}
+
+.composer-file-item.is-uploaded .composer-file-icon {
+  border-color: rgba(76, 220, 160, .34);
+  color: #8df0c0;
+}
+
+.composer-file-item.is-error {
+  border-color: rgba(255, 100, 145, .32);
+}
+
+.composer-file-progress {
+  width: min(130px, 100%);
+  height: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.07);
+}
+
+.composer-file-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f81ff, #6defff);
+  transition: width 120ms linear;
 }
 
 .composer-file-upload-status {
@@ -3290,6 +3326,35 @@ body {
 .composer-file-upload-status strong {
   color: #8fe7ff;
   font-variant-numeric: tabular-nums;
+}
+
+.composer-upload-status-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.composer-upload-cancel {
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 96, 153, .28);
+  border-radius: 7px;
+  background: rgba(255, 60, 130, .07);
+  color: #ffb5cc;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.composer-upload-cancel:hover:not(:disabled) {
+  border-color: rgba(255, 96, 153, .48);
+  background: rgba(255, 60, 130, .13);
+  color: #fff;
+}
+
+.composer-upload-cancel:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
 
 .composer-file-error {
