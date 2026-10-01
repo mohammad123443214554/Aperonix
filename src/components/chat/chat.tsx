@@ -703,12 +703,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     userId: string,
     chatId: string,
     accessToken: string,
-    onProgress: (percentage: number) => void,
-    options?: {
-      parentFileId?: string | null;
-      frameTimestampMs?: number | null;
-    }
-  ): Promise<{ id: string; storagePath: string; supportsVideoFrames: boolean }> {
+    onProgress: (percentage: number) => void
+  ): Promise<{ id: string; storagePath: string }> {
     const storagePath = createStoragePath(userId, chatId, file);
     const contentType = file.type || "application/octet-stream";
 
@@ -744,7 +740,10 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
       await new Promise<void>((resolve, reject) => {
         const upload = new Upload(file, {
-          endpoint: "https://" + projectRef + ".storage.supabase.co/storage/v1/upload/resumable",
+          endpoint:
+            "https://" +
+            projectRef +
+            ".storage.supabase.co/storage/v1/upload/resumable",
           retryDelays: [0, 3000, 5000, 10000, 20000],
           headers: {
             authorization: "Bearer " + accessToken,
@@ -764,7 +763,9 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           onError: reject,
           onProgress: (bytesUploaded, bytesTotal) => {
             const percentage =
-              bytesTotal > 0 ? Math.round((bytesUploaded / bytesTotal) * 100) : 0;
+              bytesTotal > 0
+                ? Math.round((bytesUploaded / bytesTotal) * 100)
+                : 0;
             onProgress(percentage);
           },
           onSuccess: () => {
@@ -777,50 +778,19 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       });
     }
 
-    const baseMetadata = {
-      user_id: userId,
-      chat_id: chatId,
-      original_name: file.name,
-      storage_path: storagePath,
-      mime_type: contentType,
-      size_bytes: file.size,
-      status: "uploaded" as const
-    };
-
-    // Video frames use two optional columns added by
-    // supabase/aperonix_video_frames.sql. If that migration has not been
-    // applied yet, keep normal file uploads working and gracefully fall back
-    // to the original file schema. Video visual-frame extraction is skipped
-    // in that case; the video itself can still be processed for audio.
-    let { data, error: metadataError } = await supabase
+    const { data, error: metadataError } = await supabase
       .from("aperonix_files")
       .insert({
-        ...baseMetadata,
-        parent_file_id: options?.parentFileId ?? null,
-        frame_timestamp_ms: options?.frameTimestampMs ?? null
+        user_id: userId,
+        chat_id: chatId,
+        original_name: file.name,
+        storage_path: storagePath,
+        mime_type: contentType,
+        size_bytes: file.size,
+        status: "uploaded"
       })
       .select("id,storage_path")
       .single();
-
-    let supportsVideoFrames = true;
-
-    if (
-      metadataError &&
-      /parent_file_id|frame_timestamp_ms|column.*does not exist/i.test(
-        String(metadataError.message ?? "")
-      )
-    ) {
-      supportsVideoFrames = false;
-
-      const legacyResult = await supabase
-        .from("aperonix_files")
-        .insert(baseMetadata)
-        .select("id,storage_path")
-        .single();
-
-      data = legacyResult.data;
-      metadataError = legacyResult.error;
-    }
 
     if (metadataError || !data) {
       await supabase.storage
@@ -831,8 +801,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
     return {
       id: data.id as string,
-      storagePath: data.storage_path as string,
-      supportsVideoFrames
+      storagePath: data.storage_path as string
     };
   }
 
