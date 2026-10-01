@@ -264,6 +264,13 @@ async function processVideo(
       error
     });
 
+    if (
+      error instanceof Error &&
+      error.message === "TWELVELABS_API_KEY is not configured."
+    ) {
+      throw error;
+    }
+
     const parts: string[] = [];
 
     try {
