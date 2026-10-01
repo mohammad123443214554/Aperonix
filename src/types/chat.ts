@@ -25,6 +25,7 @@ export interface ChatSession {
   createdAt: number;
   updatedAt: number;
   isPinned: boolean;
+  isPersisted?: boolean;
   branchFromChatId?: string | null;
   branchFromMessageId?: string | null;
 } 
