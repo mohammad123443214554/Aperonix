@@ -2501,124 +2501,44 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         throw new Error("Your session has expired. Please sign in again.");
       }
 
-      if (editingMessageId) {
-        const editingIndex = activeSession.messages.findIndex(
-          (message) => message.id === editingMessageId
-        );
-        const originalMessage = editingIndex >= 0
-          ? activeSession.messages[editingIndex]
-          : null;
+      let sessionForMessage = activeSession;
 
-        if (
-          editingIndex < 0 ||
-          !originalMessage ||
-          originalMessage.role !== "user" ||
-          !originalMessage.id
-        ) {
-          setEditingMessageId(null);
-          setInput("");
-          return;
-        }
-
-        const editedMessages: ChatMessage[] = [
-          ...activeSession.messages.slice(0, editingIndex),
-          {
-            ...originalMessage,
-            content
-          }
-        ];
-
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
-            messages: editedMessages,
-            aperonixSetting,
-            branchFromChatId: activeSession.branchFromChatId ?? null,
-            branchFromMessageId: activeSession.branchFromMessageId ?? null,
-            chatId: activeSession.id,
-            generateTitle: false
+      if (activeSession.isPersisted === false) {
+        const { data: createdSession, error: createSessionError } = await supabase
+          .from("chat_sessions")
+          .insert({
+            id: activeSession.id,
+            user_id: user.id,
+            title: "New chat",
+            is_pinned: false,
+            branch_from_chat_id: activeSession.branchFromChatId ?? null,
+            branch_from_message_id: activeSession.branchFromMessageId ?? null
           })
-        });
+          .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
+          .single();
 
-        const data = await response.json();
+        if (createSessionError) throw createSessionError;
 
-        if (!response.ok) {
-          throw new Error(data.error || "Could not resend the edited message.");
-        }
-
-        const nextContent =
-          data.message?.content || "I could not generate a response.";
-
-        await deleteMessagesAfterIndex(activeSession, editingIndex, user.id);
-
-        const { error: updateError } = await supabase
-          .from("chat_messages")
-          .update({ content })
-          .eq("id", originalMessage.id);
-
-        if (updateError) throw updateError;
-
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: nextContent
+        sessionForMessage = {
+          ...activeSession,
+          title: createdSession.title,
+          createdAt: new Date(createdSession.created_at).getTime(),
+          updatedAt: new Date(createdSession.updated_at).getTime(),
+          isPinned: Boolean(createdSession.is_pinned),
+          branchFromChatId: createdSession.branch_from_chat_id ?? null,
+          branchFromMessageId: createdSession.branch_from_message_id ?? null,
+          isPersisted: true
         };
 
-        const { data: savedAssistantMessage, error: assistantSaveError } =
-          await supabase
-            .from("chat_messages")
-            .insert({
-              chat_id: activeSession.id,
-              user_id: user.id,
-              role: "assistant",
-              content: assistantMessage.content
-            })
-            .select("id,created_at")
-            .single();
-
-        if (assistantSaveError) throw assistantSaveError;
-
-        assistantMessage.id = savedAssistantMessage.id;
-        assistantMessage.createdAt = new Date(
-          savedAssistantMessage.created_at
-        ).getTime();
-
-        const shouldUpdateTitle =
-          editingIndex === 0 &&
-          (activeSession.title === "New chat" ||
-            activeSession.title === makeTitle(originalMessage.content));
-
-        const newTitle = shouldUpdateTitle
-          ? makeTitle(content)
-          : activeSession.title;
-
-        await supabase
-          .from("chat_sessions")
-          .update({
-            title: newTitle,
-            updated_at: new Date().toISOString()
-          })
-          .eq("id", activeSession.id);
-
         setSessions((current) =>
-          current.map((session) =>
-            session.id === activeSession.id
-              ? {
-                  ...session,
-                  title: newTitle,
-                  messages: [...editedMessages, assistantMessage],
-                  updatedAt: Date.now()
-                }
-              : session
+          sortSessions(
+            current.map((session) =>
+              session.id === activeSession.id ? sessionForMessage : session
+            )
           )
         );
-
-        setEditingMessageId(null);
-        setInput("");
-        return;
+        setActiveSessionId(sessionForMessage.id);
+        navigate("/chat/" + sessionForMessage.id, true);
       }
 
       if (selectedFiles.length > 0) {
@@ -2672,7 +2592,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           const uploaded = await uploadFileToStorage(
             file,
             user.id,
-            activeSession.id,
+            sessionForMessage.id,
             accessToken,
             (percentage) => setFileUploadProgress(percentage)
           );
@@ -2688,46 +2608,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       }
 
       setInput("");
-
-      let sessionForMessage = activeSession;
-
-      if (activeSession.isPersisted === false) {
-        const { data: createdSession, error: createSessionError } = await supabase
-          .from("chat_sessions")
-          .insert({
-            id: sessionForMessage.id,
-            user_id: user.id,
-            title: "New chat",
-            is_pinned: false,
-            branch_from_chat_id: sessionForMessage.branchFromChatId ?? null,
-            branch_from_message_id: sessionForMessage.branchFromMessageId ?? null
-          })
-          .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
-          .single();
-
-        if (createSessionError) throw createSessionError;
-
-        sessionForMessage = {
-          ...activeSession,
-          title: createdSession.title,
-          createdAt: new Date(createdSession.created_at).getTime(),
-          updatedAt: new Date(createdSession.updated_at).getTime(),
-          isPinned: Boolean(createdSession.is_pinned),
-          branchFromChatId: createdSession.branch_from_chat_id ?? null,
-          branchFromMessageId: createdSession.branch_from_message_id ?? null,
-          isPersisted: true
-        };
-
-        setSessions((current) =>
-          sortSessions(
-            current.map((session) =>
-              session.id === sessionForMessage.id ? sessionForMessage : session
-            )
-          )
-        );
-        setActiveSessionId(sessionForMessage.id);
-        navigate("/chat/" + sessionForMessage.id, true);
-      }
 
       const { data: savedUserMessage, error: messageError } = await supabase
         .from("chat_messages")
