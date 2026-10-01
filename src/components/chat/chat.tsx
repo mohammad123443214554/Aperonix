@@ -1131,6 +1131,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         console.error("Aperonix chat load error:", error);
       }
     }
+  }
 
   async function handleNewChat() {
     if (isLoading) return;
