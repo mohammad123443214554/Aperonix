@@ -37,6 +37,31 @@ function extensionOf(name: string) {
   return dot > 0 ? cleanName.slice(dot + 1).toLowerCase() : "";
 }
 
+function describeFileType(attachment: AttachmentRow) {
+  const mime = attachment.mime_type.toLowerCase();
+  const extension = extensionOf(attachment.original_name);
+
+  if (extension === "apk" || mime === "application/vnd.android.package-archive") return "Android application package (APK)";
+  if (extension === "aab") return "Android App Bundle (AAB)";
+  if (extension === "zip") return "ZIP archive";
+  if (extension === "rar" || mime.includes("rar")) return "RAR archive";
+  if (extension === "7z" || mime.includes("7z")) return "7-Zip archive";
+  if (extension === "tar") return "TAR archive";
+  if (extension === "gz" || extension === "gzip") return "GZIP compressed archive";
+  if (extension === "exe") return "Windows executable";
+  if (extension === "msi") return "Windows installer package";
+  if (extension === "dmg") return "macOS disk image";
+  if (extension === "iso") return "ISO disk image";
+  if (extension === "dll") return "Windows dynamic-link library";
+  if (extension === "jar") return "Java archive";
+  if (extension === "deb") return "Debian package";
+  if (extension === "rpm") return "RPM package";
+  if (mime.startsWith("application/")) {
+    return mime.replace("application/", "").replace(/[._-]+/g, " ").trim() || "application file";
+  }
+  return extension ? "." + extension + " file" : "uploaded file";
+}
+
 function isTextLike(attachment: AttachmentRow) {
   const mime = attachment.mime_type.toLowerCase();
   const extension = extensionOf(attachment.original_name);
@@ -363,8 +388,11 @@ async function processOne(
   } else if (isTextLike(attachment)) {
     content = await processTextFile(attachment, url);
   } else {
+    const fileType = describeFileType(attachment);
     content =
-      "This file is stored securely, but Aperonix does not yet have a content extractor for this file type.";
+      'The user uploaded "' + attachment.original_name + '". It is a ' + fileType + '. ' +
+      "The file is stored securely. Identify it by its real file type when relevant. " +
+      "Do not describe it as an unknown or unsupported format, and do not invent details about its internal contents.";
   }
 
   return {
@@ -404,7 +432,11 @@ export async function buildAttachmentContext(
       processed.push({
         name: attachment.original_name,
         content:
-          "Aperonix could access the file metadata, but its content could not be processed for this response."
+          'The user uploaded "' +
+          attachment.original_name +
+          '". It is a ' +
+          describeFileType(attachment) +
+          '. The file is stored securely. Use this file type information when responding and do not call the format unknown or unsupported.'
       });
     }
   }
