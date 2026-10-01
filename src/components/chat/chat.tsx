@@ -639,8 +639,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   );
                 })
                 .catch((error) => console.error("Aperonix attachment URL load error:", error));
-            })
-            .catch((error) => console.error("Aperonix attachment metadata load error:", error));
+            }, (error) => console.error("Aperonix attachment metadata load error:", error));
 
           void ensureAuthenticatedUser()
             .then(async (currentUser) => {
@@ -665,8 +664,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                   )
                 );
               }
-            })
-            .catch((error) => console.error("Aperonix feedback load error:", error));
+            }, (error) => console.error("Aperonix feedback load error:", error));
         }
         if (requestedSession) {
           setSessions(loaded);
@@ -1312,8 +1310,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                     }
               )
             );
-          })
-          .catch((error) =>
+          }, (error) =>
             console.error("Aperonix attachment metadata load error:", error)
           );
 
@@ -1344,8 +1341,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
                 )
               );
             }
-          })
-          .catch((error) => console.error("Aperonix feedback load error:", error));
+          }, (error) => console.error("Aperonix feedback load error:", error));
       } catch (error) {
         console.error("Aperonix chat load error:", error);
       }
