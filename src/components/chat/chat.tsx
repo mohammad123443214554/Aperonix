@@ -372,28 +372,45 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   function saveChatScrollPosition(chatId: string) {
     const element = messagesScrollRef.current;
     if (!element || !chatId || typeof window === "undefined") return;
-
+    let anchorId: string | null = null;
+    let anchorOffset = 0;
+    const containerTop = element.getBoundingClientRect().top;
+    const rows = Array.from(element.querySelectorAll<HTMLElement>("[data-message-id]"));
+    for (const row of rows) {
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom > containerTop + 1) {
+        anchorId = row.dataset.messageId ?? null;
+        anchorOffset = rect.top - containerTop;
+        break;
+      }
+    }
     try {
       window.sessionStorage.setItem(
         scrollPositionStorageKey(chatId),
-        String(element.scrollTop)
+        JSON.stringify({ top: element.scrollTop, anchorId, anchorOffset })
       );
-    } catch {
-      // Ignore storage errors; scroll preservation is only an enhancement.
-    }
+    } catch {}
   }
 
   function readChatScrollPosition(chatId: string) {
     if (!chatId || typeof window === "undefined") return null;
-
     try {
-      const value = window.sessionStorage.getItem(
-        scrollPositionStorageKey(chatId)
-      );
+      const value = window.sessionStorage.getItem(scrollPositionStorageKey(chatId));
       if (value === null) return null;
-
-      const parsed = Number(value);
-      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+      try {
+        const parsed = JSON.parse(value) as { top?: unknown; anchorId?: unknown; anchorOffset?: unknown };
+        if (typeof parsed.top === "number" && parsed.top >= 0) {
+          return {
+            top: parsed.top,
+            anchorId: typeof parsed.anchorId === "string" ? parsed.anchorId : null,
+            anchorOffset: typeof parsed.anchorOffset === "number" && Number.isFinite(parsed.anchorOffset) ? parsed.anchorOffset : 0
+          };
+        }
+      } catch {
+        const legacyTop = Number(value);
+        if (Number.isFinite(legacyTop) && legacyTop >= 0) return { top: legacyTop, anchorId: null, anchorOffset: 0 };
+      }
+      return null;
     } catch {
       return null;
     }
@@ -527,123 +544,44 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           : null;
 
         async function loadMessagesForSession(session: ChatSession) {
-          const { data: rows, error: messagesError } = await supabase
-            .from("chat_messages")
-            .select("id,chat_id,role,content,created_at")
-            .eq("chat_id", session.id)
-            .order("created_at", { ascending: true });
-
-          if (messagesError) throw messagesError;
-
-          const messageRows = rows ?? [];
-          let attachmentRows: Array<{
-            id: string;
-            chat_id: string;
-            message_id: string | null;
-            original_name: string;
-            storage_path: string;
-            mime_type: string;
-            size_bytes: number;
-          }> = [];
-
-          if (messageRows.length > 0) {
-            const { data: files, error: filesError } = await supabase
-              .from("aperonix_files")
-              .select(
-                "id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes"
-              )
-              .eq("chat_id", session.id)
-              .eq("status", "ready")
-              .order("created_at", { ascending: true });
-
-            if (filesError) throw filesError;
-            attachmentRows = files ?? [];
-          }
-
-          const attachmentUrlEntries = await Promise.all(
-            attachmentRows.map(async (file) => {
-              const { data } = await supabase.storage
-                .from("aperonix-files")
-                .createSignedUrl(file.storage_path, 60 * 60);
-
-              return [file.id, data?.signedUrl ?? ""] as const;
-            })
-          );
-
-          const attachmentUrls = new Map(attachmentUrlEntries);
+          const [messagesResult, filesResult] = await Promise.all([
+            supabase.from("chat_messages").select("id,chat_id,role,content,created_at").eq("chat_id", session.id).order("created_at", { ascending: true }),
+            supabase.from("aperonix_files").select("id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes").eq("chat_id", session.id).eq("status", "ready").order("created_at", { ascending: true })
+          ]);
+          if (messagesResult.error) throw messagesResult.error;
+          if (filesResult.error) throw filesResult.error;
+          const messageRows = messagesResult.data ?? [];
+          const attachmentRows = filesResult.data ?? [];
           const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
-
           for (const file of attachmentRows) {
             if (!file.message_id) continue;
-
-            const attachment: ChatAttachment = {
-              id: file.id,
-              name: file.original_name,
-              sizeBytes: Number(file.size_bytes),
-              mimeType: file.mime_type,
-              storagePath: file.storage_path,
-              url: attachmentUrls.get(file.id) || undefined
-            };
-
+            const attachment: ChatAttachment = { id: file.id, name: file.original_name, sizeBytes: Number(file.size_bytes), mimeType: file.mime_type, storagePath: file.storage_path };
             const current = attachmentsByMessageId.get(file.message_id) ?? [];
             current.push(attachment);
             attachmentsByMessageId.set(file.message_id, current);
           }
+          const messages: ChatMessage[] = messageRows.map(({ id, role, content, created_at }) => ({ id, role, content, createdAt: new Date(created_at).getTime(), attachments: attachmentsByMessageId.get(id) ?? [] }));
+          setSessions((current) => current.map((item) => item.id === session.id ? { ...item, messages } : item));
+          if (pendingBottomChatIdRef.current === session.id) { pendingBottomChatIdRef.current = null; forceScrollToBottomRef.current = true; }
 
-          const messages: ChatMessage[] = messageRows.map(
-            ({ id, role, content, created_at }) => ({
-              id,
-              role,
-              content,
-              createdAt: new Date(created_at).getTime(),
-              attachments: attachmentsByMessageId.get(id) ?? []
-            })
-          );
-
-          setSessions((current) =>
-            current.map((item) =>
-              item.id === session.id ? { ...item, messages } : item
-            )
-          );
-
-          if (pendingBottomChatIdRef.current === session.id) {
-            pendingBottomChatIdRef.current = null;
-            forceScrollToBottomRef.current = true;
+          if (attachmentRows.length > 0) {
+            void Promise.all(attachmentRows.map(async (file) => {
+              const { data } = await supabase.storage.from("aperonix-files").createSignedUrl(file.storage_path, 60 * 60);
+              return [file.id, data?.signedUrl ?? ""] as const;
+            })).then((urlEntries) => {
+              const attachmentUrls = new Map(urlEntries);
+              setSessions((current) => current.map((item) => item.id !== session.id ? item : { ...item, messages: item.messages.map((message) => ({ ...message, attachments: message.attachments?.map((attachment) => ({ ...attachment, url: attachmentUrls.get(attachment.id) || attachment.url })) })) }));
+            }).catch((error) => console.error("Aperonix attachment URL load error:", error));
           }
 
-          const assistantMessageIds = messageRows
-            .filter((message) => message.role === "assistant")
-            .map((message) => message.id);
-
-          if (assistantMessageIds.length > 0) {
-            const { data: feedbackRows, error: feedbackError } = await supabase
-              .from("message_feedback")
-              .select("message_id,feedback")
-              .eq("user_id", user.id)
-              .in("message_id", assistantMessageIds);
-
-            if (
-              feedbackError &&
-              !/does not exist|relation .*message_feedback/i.test(
-                feedbackError.message
-              )
-            ) {
-              console.error("Feedback load error:", feedbackError);
-            }
-
-            if (mounted && feedbackRows) {
-              setFeedbackByMessageId(
-                Object.fromEntries(
-                  feedbackRows.map((row) => [
-                    row.message_id,
-                    row.feedback as FeedbackType
-                  ])
-                )
-              );
-            }
-          }
+          void ensureAuthenticatedUser().then(async (currentUser) => {
+            const assistantMessageIds = messageRows.filter((message) => message.role === "assistant").map((message) => message.id);
+            if (assistantMessageIds.length === 0) return;
+            const { data: feedbackRows, error: feedbackError } = await supabase.from("message_feedback").select("message_id,feedback").eq("user_id", currentUser.id).in("message_id", assistantMessageIds);
+            if (feedbackError && !/does not exist|relation .*message_feedback/i.test(feedbackError.message)) console.error("Feedback load error:", feedbackError);
+            if (feedbackRows) setFeedbackByMessageId(Object.fromEntries(feedbackRows.map((row) => [row.message_id, row.feedback as FeedbackType])));
+          }).catch((error) => console.error("Aperonix feedback load error:", error));
         }
-
         if (requestedSession) {
           setSessions(loaded);
           setActiveSessionId(requestedSession.id);
@@ -1078,29 +1016,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
 
   useEffect(() => {
     const element = messagesScrollRef.current;
-    if (!element) return;
-
-    const savePosition = () => {
-      if (activeSession?.id) {
-        saveChatScrollPosition(activeSession.id);
-      }
-    };
-
-    element.addEventListener("scroll", savePosition, { passive: true });
-    return () => {
-      savePosition();
-      element.removeEventListener("scroll", savePosition);
-    };
-  }, [activeSession?.id]);
-
-  useEffect(() => {
-    const element = messagesScrollRef.current;
     if (!element || !activeSession?.id || isHistoryLoading) return;
-
-    const shouldWaitForSelectedChat =
-      pendingBottomChatIdRef.current === activeSession.id &&
-      messages.length === 0;
-
+    const shouldWaitForSelectedChat = pendingBottomChatIdRef.current === activeSession.id && messages.length === 0;
     if (shouldWaitForSelectedChat) return;
 
     const frame = window.requestAnimationFrame(() => {
@@ -1111,24 +1028,30 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         saveChatScrollPosition(activeSession.id);
         return;
       }
-
       if (scrollRestorePendingRef.current) return;
-
       const savedPosition = readChatScrollPosition(activeSession.id);
       if (savedPosition !== null) {
         scrollRestorePendingRef.current = true;
-        element.scrollTop = Math.min(
-          savedPosition,
-          Math.max(0, element.scrollHeight - element.clientHeight)
-        );
+        const anchor = savedPosition.anchorId
+          ? element.querySelector<HTMLElement>("[data-message-id=" + JSON.stringify(savedPosition.anchorId) + "]")
+          : null;
+        if (anchor) {
+          const containerTop = element.getBoundingClientRect().top;
+          const anchorTop = anchor.getBoundingClientRect().top;
+          const targetTop = element.scrollTop + anchorTop - containerTop - savedPosition.anchorOffset;
+          element.scrollTop = Math.max(0, Math.min(targetTop, Math.max(0, element.scrollHeight - element.clientHeight)));
+        } else {
+          element.scrollTop = Math.min(savedPosition.top, Math.max(0, element.scrollHeight - element.clientHeight));
+        }
         window.requestAnimationFrame(() => {
           scrollRestorePendingRef.current = false;
+          saveChatScrollPosition(activeSession.id);
         });
-      } else {
-        element.scrollTop = element.scrollHeight;
+        return;
       }
+      element.scrollTop = element.scrollHeight;
+      saveChatScrollPosition(activeSession.id);
     });
-
     return () => window.cancelAnimationFrame(frame);
   }, [activeSession?.id, messages.length, isHistoryLoading]);
 
@@ -1164,130 +1087,50 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setIsSidebarOpen(false);
     navigate(`/chat/${id}`);
 
-    // History initially loads only lightweight chat metadata. Load the
-    // selected chat's messages on demand when the user opens it.
+    // Load selected chat on demand, but never wait for private media URLs or feedback.
     if (session.messages.length === 0) {
       try {
-        const user = await ensureAuthenticatedUser();
-
-        const { data: rows, error: messagesError } = await supabase
-          .from("chat_messages")
-          .select("id,chat_id,role,content,created_at")
-          .eq("chat_id", id)
-          .order("created_at", { ascending: true });
-
-        if (messagesError) throw messagesError;
-
-        const messageRows = rows ?? [];
-        let attachmentRows: Array<{
-          id: string;
-          chat_id: string;
-          message_id: string | null;
-          original_name: string;
-          storage_path: string;
-          mime_type: string;
-          size_bytes: number;
-        }> = [];
-
-        if (messageRows.length > 0) {
-          const { data: files, error: filesError } = await supabase
-            .from("aperonix_files")
-            .select("id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes")
-            .eq("chat_id", id)
-            .eq("status", "ready")
-            .order("created_at", { ascending: true });
-
-          if (filesError) throw filesError;
-          attachmentRows = files ?? [];
-        }
-
-        const attachmentUrlEntries = await Promise.all(
-          attachmentRows.map(async (file) => {
-            const { data } = await supabase.storage
-              .from("aperonix-files")
-              .createSignedUrl(file.storage_path, 60 * 60);
-
-            return [file.id, data?.signedUrl ?? ""] as const;
-          })
-        );
-
-        const attachmentUrls = new Map(attachmentUrlEntries);
+        const [messagesResult, filesResult] = await Promise.all([
+          supabase.from("chat_messages").select("id,chat_id,role,content,created_at").eq("chat_id", id).order("created_at", { ascending: true }),
+          supabase.from("aperonix_files").select("id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes").eq("chat_id", id).eq("status", "ready").order("created_at", { ascending: true })
+        ]);
+        if (messagesResult.error) throw messagesResult.error;
+        if (filesResult.error) throw filesResult.error;
+        const messageRows = messagesResult.data ?? [];
+        const attachmentRows = filesResult.data ?? [];
         const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
-
         for (const file of attachmentRows) {
           if (!file.message_id) continue;
-
-          const attachment: ChatAttachment = {
-            id: file.id,
-            name: file.original_name,
-            sizeBytes: Number(file.size_bytes),
-            mimeType: file.mime_type,
-            storagePath: file.storage_path,
-            url: attachmentUrls.get(file.id) || undefined
-          };
-
+          const attachment: ChatAttachment = { id: file.id, name: file.original_name, sizeBytes: Number(file.size_bytes), mimeType: file.mime_type, storagePath: file.storage_path };
           const current = attachmentsByMessageId.get(file.message_id) ?? [];
           current.push(attachment);
           attachmentsByMessageId.set(file.message_id, current);
         }
+        const loadedMessages: ChatMessage[] = messageRows.map(({ id: messageId, role, content: messageContent, created_at }) => ({ id: messageId, role, content: messageContent, createdAt: new Date(created_at).getTime(), attachments: attachmentsByMessageId.get(messageId) ?? [] }));
+        setSessions((current) => current.map((item) => item.id === id ? { ...item, messages: loadedMessages } : item));
+        if (pendingBottomChatIdRef.current === id) { pendingBottomChatIdRef.current = null; forceScrollToBottomRef.current = true; }
 
-        const loadedMessages: ChatMessage[] = messageRows.map(
-          ({ id: messageId, role, content: messageContent, created_at }) => ({
-            id: messageId,
-            role,
-            content: messageContent,
-            createdAt: new Date(created_at).getTime(),
-            attachments: attachmentsByMessageId.get(messageId) ?? []
-          })
-        );
-
-        setSessions((current) =>
-          current.map((item) =>
-            item.id === id ? { ...item, messages: loadedMessages } : item
-          )
-        );
-
-        if (pendingBottomChatIdRef.current === id) {
-          pendingBottomChatIdRef.current = null;
-          forceScrollToBottomRef.current = true;
+        if (attachmentRows.length > 0) {
+          void Promise.all(attachmentRows.map(async (file) => {
+            const { data } = await supabase.storage.from("aperonix-files").createSignedUrl(file.storage_path, 60 * 60);
+            return [file.id, data?.signedUrl ?? ""] as const;
+          })).then((urlEntries) => {
+            const attachmentUrls = new Map(urlEntries);
+            setSessions((current) => current.map((item) => item.id !== id ? item : { ...item, messages: item.messages.map((message) => ({ ...message, attachments: message.attachments?.map((attachment) => ({ ...attachment, url: attachmentUrls.get(attachment.id) || attachment.url })) })) }));
+          }).catch((error) => console.error("Aperonix attachment URL load error:", error));
         }
 
-        const assistantMessageIds = messageRows
-          .filter((message) => message.role === "assistant")
-          .map((message) => message.id);
-
-        if (assistantMessageIds.length > 0) {
-          const { data: feedbackRows, error: feedbackError } = await supabase
-            .from("message_feedback")
-            .select("message_id,feedback")
-            .eq("user_id", user.id)
-            .in("message_id", assistantMessageIds);
-
-          if (
-            feedbackError &&
-            !/does not exist|relation .*message_feedback/i.test(
-              feedbackError.message
-            )
-          ) {
-            console.error("Feedback load error:", feedbackError);
-          }
-
-          if (feedbackRows) {
-            setFeedbackByMessageId(
-              Object.fromEntries(
-                feedbackRows.map((row) => [
-                  row.message_id,
-                  row.feedback as FeedbackType
-                ])
-              )
-            );
-          }
-        }
+        void ensureAuthenticatedUser().then(async (currentUser) => {
+          const assistantMessageIds = messageRows.filter((message) => message.role === "assistant").map((message) => message.id);
+          if (assistantMessageIds.length === 0) return;
+          const { data: feedbackRows, error: feedbackError } = await supabase.from("message_feedback").select("message_id,feedback").eq("user_id", currentUser.id).in("message_id", assistantMessageIds);
+          if (feedbackError && !/does not exist|relation .*message_feedback/i.test(feedbackError.message)) console.error("Feedback load error:", feedbackError);
+          if (feedbackRows) setFeedbackByMessageId(Object.fromEntries(feedbackRows.map((row) => [row.message_id, row.feedback as FeedbackType])));
+        }).catch((error) => console.error("Aperonix feedback load error:", error));
       } catch (error) {
         console.error("Aperonix chat load error:", error);
       }
     }
-  }
 
   async function handleNewChat() {
     if (isLoading) return;
@@ -3386,6 +3229,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
               messages.map((message, index) => (
               <article
                 key={`${activeSession?.id}-${message.role}-${index}`}
+                data-message-id={message.id ?? `local-${index}`}
                 className={`message-row ${message.role}`}
               >
                 {message.role === "assistant" && (
