@@ -1044,24 +1044,16 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     if (isLoading) return;
     stopReadAloud();
 
-    try {
-      const user = await ensureAuthenticatedUser();
-      const { data, error } = await supabase
-        .from("chat_sessions")
-        .insert({ user_id: user.id, title: "New chat" })
-        .select("id,title,created_at,updated_at,is_pinned,branch_from_chat_id,branch_from_message_id")
-        .single();
+    // A fresh chat is temporary. It is not written to Supabase or history
+    // until the user sends the first message.
+    const next = createLocalSession();
 
-      if (error) throw error;
-
-      const next = createLocalSession();
-
-      setSessions((current) => [...current.filter((session) => session.isPersisted !== false), next]);
-      setActiveSessionId(next.id);
-      navigate("/chat");
-    } catch (error) {
-      console.error("New chat error:", error);
-    }
+    setSessions((current) => [
+      ...current.filter((session) => session.isPersisted !== false),
+      next
+    ]);
+    setActiveSessionId(next.id);
+    navigate("/chat");
 
     setInput("");
     setOpenMenuId(null);
