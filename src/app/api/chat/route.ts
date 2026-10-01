@@ -380,7 +380,7 @@ export async function POST(request: Request) {
           const { data: frameRows, error: frameError } = await authClient
             .from("aperonix_files")
             .select(
-              "id,message_id,parent_file_id,frame_timestamp_ms,original_name,storage_path,mime_type,size_bytes,status"
+              "id,message_id,parent_file_id,frame_timestamp_ms,video_analysis,video_analysis_at,original_name,storage_path,mime_type,size_bytes,status"
             )
             .eq("user_id", authData.user.id)
             .eq("status", "ready")
