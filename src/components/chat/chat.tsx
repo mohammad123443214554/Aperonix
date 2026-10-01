@@ -2745,6 +2745,14 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     } catch (error) {
       if (uploadCancelledRef.current || (error instanceof Error && error.message === "UPLOAD_CANCELLED")) {
         console.info("Aperonix file upload cancelled by user.");
+        if (!attachmentsCommitted && uploadedFilesForPrompt.length > 0) {
+          await Promise.all(
+            uploadedFilesForPrompt.map((file) =>
+              deleteUploadedFile(file.storagePath, file.id)
+            )
+          );
+        }
+        setUploadFileStates({});
         setFileUploadStatus("Upload cancelled. Your selected files are still here.");
         setFileUploadProgress(0);
         setIsUploadCancellable(false);
