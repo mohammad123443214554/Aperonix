@@ -697,14 +697,6 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const messages = activeSession?.messages ?? [];
   const isEmptyChat = Boolean(activeSession && messages.length === 0);
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeSessionId, messages.length]);
-
   const canSend = useMemo(
     () =>
       input.trim().length > 0 &&
