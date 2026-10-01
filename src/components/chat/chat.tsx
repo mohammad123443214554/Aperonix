@@ -362,6 +362,41 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const readAloudBoundaryTimeRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLElement | null>(null);
+  const forceScrollToBottomRef = useRef(false);
+  const scrollRestorePendingRef = useRef(false);
+
+  const scrollPositionStorageKey = (chatId: string) =>
+    `aperonix-chat-scroll:${chatId}`;
+
+  function saveChatScrollPosition(chatId: string) {
+    const element = messagesScrollRef.current;
+    if (!element || !chatId || typeof window === "undefined") return;
+
+    try {
+      window.sessionStorage.setItem(
+        scrollPositionStorageKey(chatId),
+        String(element.scrollTop)
+      );
+    } catch {
+      // Ignore storage errors; scroll preservation is only an enhancement.
+    }
+  }
+
+  function readChatScrollPosition(chatId: string) {
+    if (!chatId || typeof window === "undefined") return null;
+
+    try {
+      const value = window.sessionStorage.getItem(
+        scrollPositionStorageKey(chatId)
+      );
+      if (value === null) return null;
+
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
 
   useEffect(() => {
     const handlePopState = () => {
@@ -1018,8 +1053,54 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   }
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+    const element = messagesScrollRef.current;
+    if (!element) return;
+
+    const savePosition = () => {
+      if (activeSession?.id) {
+        saveChatScrollPosition(activeSession.id);
+      }
+    };
+
+    element.addEventListener("scroll", savePosition, { passive: true });
+    return () => {
+      savePosition();
+      element.removeEventListener("scroll", savePosition);
+    };
+  }, [activeSession?.id]);
+
+  useEffect(() => {
+    const element = messagesScrollRef.current;
+    if (!element || !activeSession?.id) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      if (forceScrollToBottomRef.current) {
+        element.scrollTop = element.scrollHeight;
+        forceScrollToBottomRef.current = false;
+        scrollRestorePendingRef.current = false;
+        saveChatScrollPosition(activeSession.id);
+        return;
+      }
+
+      if (scrollRestorePendingRef.current) return;
+
+      const savedPosition = readChatScrollPosition(activeSession.id);
+      if (savedPosition !== null) {
+        scrollRestorePendingRef.current = true;
+        element.scrollTop = Math.min(
+          savedPosition,
+          Math.max(0, element.scrollHeight - element.clientHeight)
+        );
+        window.requestAnimationFrame(() => {
+          scrollRestorePendingRef.current = false;
+        });
+      } else {
+        element.scrollTop = element.scrollHeight;
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSession?.id, messages.length, isHistoryLoading]);
 
   useEffect(() => {
     const element = document.querySelector<HTMLTextAreaElement>(
@@ -1034,6 +1115,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   function selectSession(id: string) {
     if (isLoading) return;
     stopReadAloud();
+    // Opening a chat from history should always start at its latest message.
+    forceScrollToBottomRef.current = true;
     setActiveSessionId(id);
     setOpenMenuId(null);
     setIsSidebarOpen(false);
@@ -1052,6 +1135,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
       ...current.filter((session) => session.isPersisted !== false),
       next
     ]);
+    forceScrollToBottomRef.current = true;
     setActiveSessionId(next.id);
     navigate("/chat");
 
@@ -3103,7 +3187,13 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
           </div>
         </header>
 
-        <section className="messages" aria-live="polite" ref={(node) => { messagesScrollRef.current = node; }}>
+        <section
+          className="messages"
+          aria-live="polite"
+          ref={(node) => {
+            messagesScrollRef.current = node;
+          }}
+        >
           <div className="messages-inner">
             {isEmptyChat ? (
               <div className="empty-chat-welcome" aria-label="Aperonix welcome">
