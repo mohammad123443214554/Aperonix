@@ -1104,15 +1104,137 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     element.scrollTop = element.scrollHeight;
   }, [input]);
 
-  function selectSession(id: string) {
-    if (isLoading) return;
+  async function selectSession(id: string) {
+    if (isLoading || isHistoryLoading) return;
+
+    const session = sessions.find((item) => item.id === id);
+    if (!session || session.isPersisted === false) return;
+
     stopReadAloud();
-    // Opening a chat from history should always start at its latest message.
     forceScrollToBottomRef.current = true;
     setActiveSessionId(id);
     setOpenMenuId(null);
     setIsSidebarOpen(false);
     navigate(`/chat/${id}`);
+
+    // History initially loads only lightweight chat metadata. Load the
+    // selected chat's messages on demand when the user opens it.
+    if (session.messages.length === 0) {
+      try {
+        const user = await ensureAuthenticatedUser();
+
+        const { data: rows, error: messagesError } = await supabase
+          .from("chat_messages")
+          .select("id,chat_id,role,content,created_at")
+          .eq("chat_id", id)
+          .order("created_at", { ascending: true });
+
+        if (messagesError) throw messagesError;
+
+        const messageRows = rows ?? [];
+        let attachmentRows: Array<{
+          id: string;
+          chat_id: string;
+          message_id: string | null;
+          original_name: string;
+          storage_path: string;
+          mime_type: string;
+          size_bytes: number;
+        }> = [];
+
+        if (messageRows.length > 0) {
+          const { data: files, error: filesError } = await supabase
+            .from("aperonix_files")
+            .select("id,chat_id,message_id,original_name,storage_path,mime_type,size_bytes")
+            .eq("chat_id", id)
+            .eq("status", "ready")
+            .order("created_at", { ascending: true });
+
+          if (filesError) throw filesError;
+          attachmentRows = files ?? [];
+        }
+
+        const attachmentUrlEntries = await Promise.all(
+          attachmentRows.map(async (file) => {
+            const { data } = await supabase.storage
+              .from("aperonix-files")
+              .createSignedUrl(file.storage_path, 60 * 60);
+
+            return [file.id, data?.signedUrl ?? ""] as const;
+          })
+        );
+
+        const attachmentUrls = new Map(attachmentUrlEntries);
+        const attachmentsByMessageId = new Map<string, ChatAttachment[]>();
+
+        for (const file of attachmentRows) {
+          if (!file.message_id) continue;
+
+          const attachment: ChatAttachment = {
+            id: file.id,
+            name: file.original_name,
+            sizeBytes: Number(file.size_bytes),
+            mimeType: file.mime_type,
+            storagePath: file.storage_path,
+            url: attachmentUrls.get(file.id) || undefined
+          };
+
+          const current = attachmentsByMessageId.get(file.message_id) ?? [];
+          current.push(attachment);
+          attachmentsByMessageId.set(file.message_id, current);
+        }
+
+        const loadedMessages: ChatMessage[] = messageRows.map(
+          ({ id: messageId, role, content: messageContent, created_at }) => ({
+            id: messageId,
+            role,
+            content: messageContent,
+            createdAt: new Date(created_at).getTime(),
+            attachments: attachmentsByMessageId.get(messageId) ?? []
+          })
+        );
+
+        setSessions((current) =>
+          current.map((item) =>
+            item.id === id ? { ...item, messages: loadedMessages } : item
+          )
+        );
+
+        const assistantMessageIds = messageRows
+          .filter((message) => message.role === "assistant")
+          .map((message) => message.id);
+
+        if (assistantMessageIds.length > 0) {
+          const { data: feedbackRows, error: feedbackError } = await supabase
+            .from("message_feedback")
+            .select("message_id,feedback")
+            .eq("user_id", user.id)
+            .in("message_id", assistantMessageIds);
+
+          if (
+            feedbackError &&
+            !/does not exist|relation .*message_feedback/i.test(
+              feedbackError.message
+            )
+          ) {
+            console.error("Feedback load error:", feedbackError);
+          }
+
+          if (feedbackRows) {
+            setFeedbackByMessageId(
+              Object.fromEntries(
+                feedbackRows.map((row) => [
+                  row.message_id,
+                  row.feedback as FeedbackType
+                ])
+              )
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Aperonix chat load error:", error);
+      }
+    }
   }
 
   async function handleNewChat() {
