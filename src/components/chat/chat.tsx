@@ -472,7 +472,7 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
         // Only the currently requested chat is hydrated with messages and
         // attachments. The sidebar gets lightweight session metadata so
         // opening Aperonix does not download every conversation at once.
-        const requestedMatch = window.location.pathname.match(/^\\/chat\\/([^/]+)$/);
+        const requestedMatch = window.location.pathname.match(/^\/chat\/([^/]+)$/);
         const requestedId = requestedMatch
           ? decodeURIComponent(requestedMatch[1])
           : null;
