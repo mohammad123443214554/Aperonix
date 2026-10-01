@@ -38,11 +38,11 @@ function getGeminiApiKey() {
 async function readGeminiError(response: Response) {
   try {
     const payload = await response.json();
-    const message =
+    return String(
       payload?.error?.message ||
-      payload?.message ||
-      "Gemini API request failed.";
-    return String(message);
+        payload?.message ||
+        `Gemini API request failed with HTTP ${response.status}.`
+    );
   } catch {
     return `Gemini API request failed with HTTP ${response.status}.`;
   }
@@ -119,6 +119,7 @@ async function uploadVideoToGemini(
 
   return payload.file;
 }
+
 async function getGeminiFile(fileName: string) {
   const apiKey = getGeminiApiKey();
 
@@ -145,7 +146,9 @@ async function waitForGeminiFile(fileName: string) {
   while (Date.now() - startedAt < FILE_PROCESSING_TIMEOUT_MS) {
     const file = await getGeminiFile(fileName);
 
-    if (file.state === "ACTIVE") return file;
+    if (file.state === "ACTIVE") {
+      return file;
+    }
 
     if (file.state === "FAILED") {
       throw new Error(
@@ -162,6 +165,7 @@ async function waitForGeminiFile(fileName: string) {
 async function deleteGeminiFile(fileName: string) {
   try {
     const apiKey = getGeminiApiKey();
+
     const response = await fetch(
       `${GEMINI_API_BASE}/${fileName}`,
       {
@@ -183,66 +187,26 @@ async function deleteGeminiFile(fileName: string) {
   }
 }
 
-function extractInteractionText(payload: any) {
-  if (typeof payload?.output_text === "string") {
-    return payload.output_text.trim();
-  }
-
-  const texts: string[] = [];
-
-  for (const step of Array.isArray(payload?.steps) ? payload.steps : []) {
-    if (step?.type !== "model_output") continue;
-
-    for (const content of Array.isArray(step?.content) ? step.content : []) {
-      if (content?.type === "text" && typeof content.text === "string") {
-        texts.push(content.text);
-      }
-    }
-  }
-
-  return texts.join("\n").trim();
-}
-
-function extractInteractionText(payload: any) {
-  if (typeof payload?.output_text === "string") {
-    return payload.output_text.trim();
-  }
-
-  const texts: string[] = [];
-
-  for (const step of Array.isArray(payload?.steps) ? payload.steps : []) {
-    if (step?.type !== "model_output") continue;
-
-    for (const content of Array.isArray(step?.content) ? step.content : []) {
-      if (content?.type === "text" && typeof content.text === "string") {
-        texts.push(content.text);
-      }
-    }
-  }
-
-  return texts.join("\n").trim();
-}
-
 function buildVideoPrompt() {
   return [
     "You are the video-understanding engine for Aperonix AI.",
-    "Analyze the ENTIRE uploaded video using both its visual stream and audio stream when available.",
-    "Return factual reference material that another AI assistant can use to answer many different questions about this video.",
+    "Analyze the ENTIRE uploaded video using both visual information and audio information when available.",
+    "Create factual reference material that another AI assistant can use to answer the user's questions about this exact video.",
     "",
     "Include:",
-    "- a clear overall summary of what happens",
-    "- important events and scene changes in chronological order with timestamps when useful",
-    "- people, objects, locations, actions, and interactions that are clearly visible",
-    "- spoken dialogue, narration, important sounds, and other meaningful audio information",
-    "- visible text, captions, signs, UI text, numbers, and labels when readable",
-    "- important visual details such as screens, diagrams, charts, colors, demonstrations, and animations",
-    "- anything notable that could matter for follow-up questions",
+    "- an overall summary of what happens",
+    "- important events and scene changes in chronological order",
+    "- timestamps in MM:SS format when useful",
+    "- clearly visible people, objects, locations, actions, and interactions",
+    "- spoken dialogue, narration, important sounds, and other meaningful audio",
+    "- readable text, captions, signs, numbers, labels, and UI text",
+    "- screens, diagrams, charts, demonstrations, animations, and other important visual details",
+    "- details that may be useful for follow-up questions",
     "",
-    "Be factual. Clearly separate visible/audible facts from uncertainty.",
-    "Do not invent identities, words, events, or details that cannot be supported by the video.",
-    "Use timestamps in MM:SS format when they help locate an event.",
-    "Keep the reference detailed but non-repetitive.",
-    "IMPORTANT: You are specifically responsible for analyzing the visual content. Never claim that you cannot see, watch, or analyze the video."
+    "Be factual and do not invent details.",
+    "If something is uncertain, clearly mark it as uncertain.",
+    "Do not claim that you cannot see, watch, or analyze the video. Your job is specifically to analyze the video.",
+    "Return only the useful video reference material, not advice about how to analyze it."
   ].join("\n");
 }
 
@@ -259,11 +223,9 @@ function normalizeAnalysis(text: string) {
     : cleaned;
 }
 
-async function analyzeWithGenerateContent(
+async function generateVideoAnalysis(
   file: GeminiFile,
-  mimeType: string,
-  prompt: string,
-  processing: "static" | "agentic"
+  mimeType: string
 ) {
   const apiKey = getGeminiApiKey();
 
@@ -284,13 +246,10 @@ async function analyzeWithGenerateContent(
                 file_data: {
                   file_uri: file.uri,
                   mime_type: mimeType
-                },
-                ...(processing === "agentic"
-                  ? { media_processing: "AGENTIC" }
-                  : {})
+                }
               },
               {
-                text: prompt
+                text: buildVideoPrompt()
               }
             ]
           }
@@ -300,8 +259,7 @@ async function analyzeWithGenerateContent(
           thinkingConfig: {
             thinkingLevel: "low"
           }
-        },
-
+        }
       })
     }
   );
@@ -311,61 +269,13 @@ async function analyzeWithGenerateContent(
   }
 
   const payload = await response.json();
-  const text = String(
-    payload?.candidates?.[0]?.content?.parts
-      ?.map((part: any) => part?.text || "")
-      .join("") || ""
-  );
+  const text = Array.isArray(payload?.candidates?.[0]?.content?.parts)
+    ? payload.candidates[0].content.parts
+        .map((part: any) => (typeof part?.text === "string" ? part.text : ""))
+        .join("")
+    : "";
 
   return normalizeAnalysis(text);
-}
-
-async function analyzeWithInteractions(
-  file: GeminiFile,
-  mimeType: string,
-  prompt: string,
-  processing: "static" | "agentic"
-) {
-  const apiKey = getGeminiApiKey();
-
-  const response = await fetch(`${GEMINI_API_BASE}/interactions`, {
-    method: "POST",
-    headers: {
-      "x-goog-api-key": apiKey,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: GEMINI_VIDEO_MODEL,
-      store: false,
-      input: [
-        {
-          type: "video",
-          uri: file.uri,
-          mime_type: mimeType,
-          // IMPORTANT: Gemini expects processing as an object, not a
-          // string such as "static" or "agentic".
-          processing: {
-            type: processing
-          }
-        },
-        {
-          type: "text",
-          text: prompt
-        }
-      ],
-      generation_config: {
-        max_output_tokens: 7000,
-        thinking_level: "low"
-      }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(await readGeminiError(response));
-  }
-
-  const payload = await response.json();
-  return normalizeAnalysis(extractInteractionText(payload));
 }
 
 export async function analyzeVideoWithGemini(input: {
@@ -381,56 +291,11 @@ export async function analyzeVideoWithGemini(input: {
 
   try {
     const activeFile = await waitForGeminiFile(uploaded.name!);
-    const durationSeconds = parseVideoDuration(
-      activeFile.metadata?.videoMetadata?.videoDuration
+
+    return await generateVideoAnalysis(
+      activeFile,
+      activeFile.mimeType || input.mimeType
     );
-    const processing: "static" | "agentic" =
-      durationSeconds > 0 && durationSeconds > 300 ? "agentic" : "static";
-    const mimeType = activeFile.mimeType || input.mimeType;
-    const prompt = buildVideoPrompt();
-
-    // GenerateContent is the documented, direct video-understanding path.
-    // Interactions is retained as a provider-side fallback so one endpoint
-    // problem cannot break video understanding.
-    try {
-      return await analyzeWithGenerateContent(
-        activeFile,
-        mimeType,
-        prompt,
-        processing
-      );
-    } catch (generateContentError) {
-      console.error(
-        "Aperonix Gemini GenerateContent video analysis failed:",
-        generateContentError
-      );
-
-      try {
-        return await analyzeWithInteractions(
-          activeFile,
-          mimeType,
-          prompt,
-          processing
-        );
-      } catch (interactionError) {
-        console.error(
-          "Aperonix Gemini Interactions video analysis fallback failed:",
-          interactionError
-        );
-
-        throw new Error(
-          `Gemini video analysis failed. GenerateContent: ${
-            generateContentError instanceof Error
-              ? generateContentError.message
-              : String(generateContentError)
-          }. Interactions: ${
-            interactionError instanceof Error
-              ? interactionError.message
-              : String(interactionError)
-          }`
-        );
-      }
-    }
   } finally {
     await deleteGeminiFile(uploaded.name!);
   }
