@@ -312,58 +312,69 @@ export async function POST(request: Request) {
       );
 
       if (attachmentChatIds.length > 0) {
-        let attachmentQuery = authClient
-          .from("aperonix_files")
-          .select(
-            "id,message_id,parent_file_id,frame_timestamp_ms,video_analysis,video_analysis_at,original_name,storage_path,mime_type,size_bytes,status"
-          )
-          .eq("user_id", authData.user.id)
-          .eq("status", "ready")
-          .in("chat_id", attachmentChatIds);
+        const BASE_COLUMNS =
+          "id,message_id,original_name,storage_path,mime_type,size_bytes,status";
+        const VIDEO_COLUMNS =
+          "parent_file_id,frame_timestamp_ms,video_analysis,video_analysis_at";
 
-        if (requestedAttachmentIds.length > 0) {
-          attachmentQuery = attachmentQuery.in("id", requestedAttachmentIds);
-        } else {
-          attachmentQuery = attachmentQuery
-            .in("message_id", attachmentMessageIds)
-            .is("parent_file_id", null);
-        }
-
-        let { data: attachmentRows, error: attachmentError } =
-          await attachmentQuery
-            .order("created_at", { ascending: false })
-            .limit(5);
-
-        // Keep the chat usable if the optional video-frame migration has not
-        // been run yet. The original attachment schema can still process
-        // text, images and video audio without making the whole chat fail.
-        if (
-          attachmentError &&
-          /parent_file_id|frame_timestamp_ms|video_analysis|video_analysis_at/i.test(
-            String(attachmentError.message ?? "")
-          )
-        ) {
-          const legacyQuery = authClient
+        const runAttachmentQuery = async (
+          columns: string,
+          filterOriginalsOnly: boolean
+        ) => {
+          let query = authClient
             .from("aperonix_files")
-            .select(
-              "id,message_id,original_name,storage_path,mime_type,size_bytes,status"
-            )
+            .select(columns)
             .eq("user_id", authData.user.id)
             .eq("status", "ready")
             .in("chat_id", attachmentChatIds);
 
-          const scopedLegacyQuery =
-            requestedAttachmentIds.length > 0
-              ? legacyQuery.in("id", requestedAttachmentIds)
-              : legacyQuery
-                  .in("message_id", attachmentMessageIds);
+          if (requestedAttachmentIds.length > 0) {
+            query = query.in("id", requestedAttachmentIds);
+          } else {
+            query = query.in("message_id", attachmentMessageIds);
+            if (filterOriginalsOnly) {
+              query = query.is("parent_file_id", null);
+            }
+          }
 
-          const legacyResult = await scopedLegacyQuery
+          return (await query
             .order("created_at", { ascending: false })
-            .limit(5);
+            .limit(5)) as unknown as {
+            data: any[] | null;
+            error: { message?: string } | null;
+          };
+        };
 
-          attachmentRows = legacyResult.data as typeof attachmentRows;
-          attachmentError = legacyResult.error;
+        // Prefer the optional extracted-text cache when its SQL migration is
+        // available. Fall back through the existing schemas so the chat keeps
+        // working even when the optional cache SQL has not been run.
+        const attempts: Array<[string, boolean]> = [
+          [BASE_COLUMNS + "," + VIDEO_COLUMNS + ",extracted_text", true],
+          [BASE_COLUMNS + "," + VIDEO_COLUMNS, true],
+          [BASE_COLUMNS, false]
+        ];
+
+        let attachmentRows: any[] | null = null;
+        let attachmentError: { message?: string } | null = null;
+
+        for (const [columns, filterOriginalsOnly] of attempts) {
+          const result = await runAttachmentQuery(columns, filterOriginalsOnly);
+
+          if (!result.error) {
+            attachmentRows = result.data;
+            attachmentError = null;
+            break;
+          }
+
+          attachmentError = result.error;
+
+          if (
+            !/parent_file_id|frame_timestamp_ms|video_analysis|video_analysis_at|extracted_text/i.test(
+              String(result.error.message ?? "")
+            )
+          ) {
+            break;
+          }
         }
 
         if (attachmentError) {
@@ -376,7 +387,6 @@ export async function POST(request: Request) {
             { status: 500 }
           );
         }
-
         let allAttachmentRows = attachmentRows ?? [];
 
         const originalAttachmentIds = allAttachmentRows
