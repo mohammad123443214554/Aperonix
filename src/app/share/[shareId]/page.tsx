@@ -29,6 +29,12 @@ type SharedItem =
       updated_at: string;
     };
 
+function isMissingFunction(error: unknown) {
+  return /function .* does not exist|could not find the function|PGRST202/i.test(
+    String((error as { message?: string } | null)?.message ?? "")
+  );
+}
+
 async function getSharedItem(shareId: string): Promise<SharedItem | null> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -43,13 +49,57 @@ async function getSharedItem(shareId: string): Promise<SharedItem | null> {
     }
   });
 
-  const { data: sharedMessage, error: messageError } = await supabase
-    .from("shared_responses")
-    .select("id,content,content_type,created_at")
-    .eq("id", shareId)
-    .maybeSingle();
+  // Prefer the secure RPCs when the optional share-privacy SQL migration is
+  // installed. If it is not installed, keep the existing direct lookup path.
+  const [responseLookup, chatLookup] = await Promise.all([
+    supabase.rpc("get_shared_response", { share_id: shareId }),
+    supabase.rpc("get_shared_chat", { share_id: shareId })
+  ]);
 
-  if (!messageError && sharedMessage) {
+  const functionsMissing =
+    isMissingFunction(responseLookup.error) ||
+    isMissingFunction(chatLookup.error);
+
+  let sharedMessage: {
+    id: string;
+    content: string;
+    content_type: string;
+    created_at: string;
+  } | null = null;
+
+  let sharedChat: {
+    id: string;
+    title: string;
+    messages: unknown;
+    created_at: string;
+    updated_at: string;
+  } | null = null;
+
+  if (!functionsMissing) {
+    if (responseLookup.error && chatLookup.error) return null;
+    sharedMessage = responseLookup.data?.[0] ?? null;
+    sharedChat = chatLookup.data?.[0] ?? null;
+  } else {
+    const { data: legacyMessage } = await supabase
+      .from("shared_responses")
+      .select("id,content,content_type,created_at")
+      .eq("id", shareId)
+      .maybeSingle();
+
+    sharedMessage = legacyMessage ?? null;
+
+    if (!sharedMessage) {
+      const { data: legacyChat } = await supabase
+        .from("shared_chats")
+        .select("id,title,messages,created_at,updated_at")
+        .eq("id", shareId)
+        .maybeSingle();
+
+      sharedChat = legacyChat ?? null;
+    }
+  }
+
+  if (sharedMessage) {
     return {
       kind: "message",
       id: sharedMessage.id,
@@ -59,13 +109,7 @@ async function getSharedItem(shareId: string): Promise<SharedItem | null> {
     };
   }
 
-  const { data: sharedChat, error: chatError } = await supabase
-    .from("shared_chats")
-    .select("id,title,messages,created_at,updated_at")
-    .eq("id", shareId)
-    .maybeSingle();
-
-  if (chatError || !sharedChat) return null;
+  if (!sharedChat) return null;
 
   const rawMessages = Array.isArray(sharedChat.messages) ? sharedChat.messages : [];
   const messages: SharedMessage[] = rawMessages
@@ -78,10 +122,11 @@ async function getSharedItem(shareId: string): Promise<SharedItem | null> {
       } =>
         Boolean(message) &&
         typeof message === "object" &&
-        typeof message.id === "string" &&
-        (message.role === "user" || message.role === "assistant") &&
-        typeof message.content === "string" &&
-        typeof message.created_at === "string"
+        typeof (message as { id?: unknown }).id === "string" &&
+        ((message as { role?: unknown }).role === "user" ||
+          (message as { role?: unknown }).role === "assistant") &&
+        typeof (message as { content?: unknown }).content === "string" &&
+        typeof (message as { created_at?: unknown }).created_at === "string"
     )
     .map((message) => ({
       id: message.id,
