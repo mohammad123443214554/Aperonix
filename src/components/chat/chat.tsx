@@ -364,57 +364,8 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
   const messagesScrollRef = useRef<HTMLElement | null>(null);
   const forceScrollToBottomRef = useRef(false);
   const pendingBottomChatIdRef = useRef<string | null>(null);
-  const scrollRestorePendingRef = useRef(false);
-
-  const scrollPositionStorageKey = (chatId: string) =>
-    `aperonix-chat-scroll:${chatId}`;
-
-  function saveChatScrollPosition(chatId: string) {
-    const element = messagesScrollRef.current;
-    if (!element || !chatId || typeof window === "undefined") return;
-    let anchorId: string | null = null;
-    let anchorOffset = 0;
-    const containerTop = element.getBoundingClientRect().top;
-    const rows = Array.from(element.querySelectorAll<HTMLElement>("[data-message-id]"));
-    for (const row of rows) {
-      const rect = row.getBoundingClientRect();
-      if (rect.bottom > containerTop + 1) {
-        anchorId = row.dataset.messageId ?? null;
-        anchorOffset = rect.top - containerTop;
-        break;
-      }
-    }
-    try {
-      window.sessionStorage.setItem(
-        scrollPositionStorageKey(chatId),
-        JSON.stringify({ top: element.scrollTop, anchorId, anchorOffset })
-      );
-    } catch {}
-  }
-
-  function readChatScrollPosition(chatId: string) {
-    if (!chatId || typeof window === "undefined") return null;
-    try {
-      const value = window.sessionStorage.getItem(scrollPositionStorageKey(chatId));
-      if (value === null) return null;
-      try {
-        const parsed = JSON.parse(value) as { top?: unknown; anchorId?: unknown; anchorOffset?: unknown };
-        if (typeof parsed.top === "number" && parsed.top >= 0) {
-          return {
-            top: parsed.top,
-            anchorId: typeof parsed.anchorId === "string" ? parsed.anchorId : null,
-            anchorOffset: typeof parsed.anchorOffset === "number" && Number.isFinite(parsed.anchorOffset) ? parsed.anchorOffset : 0
-          };
-        }
-      } catch {
-        const legacyTop = Number(value);
-        if (Number.isFinite(legacyTop) && legacyTop >= 0) return { top: legacyTop, anchorId: null, anchorOffset: 0 };
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
+  const stickToBottomRef = useRef(true);
+  const lastScrolledChatIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -1098,83 +1049,67 @@ export default function Chat({ onSignOut }: { onSignOut: () => Promise<void> }) 
     setFileUploadProgress(0);
   }
 
+  // Keep the reader at the newest message when a chat is opened or loaded.
+  // If the reader manually scrolls upward, do not fight their position until
+  // they return to the bottom.
   useEffect(() => {
     const element = messagesScrollRef.current;
-    if (!element || !activeSession?.id) return;
+    if (!element) return;
 
-    const savePosition = () => saveChatScrollPosition(activeSession.id);
-    element.addEventListener("scroll", savePosition, { passive: true });
+    const updateStickiness = () => {
+      stickToBottomRef.current =
+        element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+    };
+
+    element.addEventListener("scroll", updateStickiness, { passive: true });
 
     return () => {
-      savePosition();
-      element.removeEventListener("scroll", savePosition);
+      element.removeEventListener("scroll", updateStickiness);
     };
   }, [activeSession?.id]);
 
+  // Images, markdown and attachments can change the message list height after
+  // the first paint. Keep the newest message visible while we are at the bottom.
   useEffect(() => {
-    const element = messagesScrollRef.current;
-    if (!element || !activeSession?.id || isHistoryLoading) return;
-    const shouldWaitForSelectedChat =
-      pendingBottomChatIdRef.current === activeSession.id &&
-      messages.length === 0;
-    if (shouldWaitForSelectedChat) return;
+    const scroller = messagesScrollRef.current;
+    const inner = scroller?.querySelector<HTMLElement>(".messages-inner");
+    if (!scroller || !inner || typeof ResizeObserver === "undefined") return;
 
-    const frame = window.requestAnimationFrame(() => {
-      if (forceScrollToBottomRef.current) {
-        element.scrollTop = element.scrollHeight;
-        forceScrollToBottomRef.current = false;
-        scrollRestorePendingRef.current = false;
-        saveChatScrollPosition(activeSession.id);
-        return;
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) {
+        scroller.scrollTop = scroller.scrollHeight;
       }
-
-      if (scrollRestorePendingRef.current) return;
-
-      const savedPosition = readChatScrollPosition(activeSession.id);
-      if (savedPosition !== null) {
-        scrollRestorePendingRef.current = true;
-        const anchor = savedPosition.anchorId
-          ? element.querySelector<HTMLElement>(
-              "[data-message-id=" + JSON.stringify(savedPosition.anchorId) + "]"
-            )
-          : null;
-
-        if (anchor) {
-          const containerTop = element.getBoundingClientRect().top;
-          const anchorTop = anchor.getBoundingClientRect().top;
-          const targetTop =
-            element.scrollTop +
-            anchorTop -
-            containerTop -
-            savedPosition.anchorOffset;
-
-          element.scrollTop = Math.max(
-            0,
-            Math.min(
-              targetTop,
-              Math.max(0, element.scrollHeight - element.clientHeight)
-            )
-          );
-        } else {
-          element.scrollTop = Math.min(
-            savedPosition.top,
-            Math.max(0, element.scrollHeight - element.clientHeight)
-          );
-        }
-
-        window.requestAnimationFrame(() => {
-          scrollRestorePendingRef.current = false;
-          saveChatScrollPosition(activeSession.id);
-        });
-        return;
-      }
-
-      element.scrollTop = element.scrollHeight;
-      saveChatScrollPosition(activeSession.id);
     });
 
-    return () => window.cancelAnimationFrame(frame);
+    observer.observe(inner);
+
+    return () => observer.disconnect();
+  }, [activeSession?.id]);
+
+  // Opening a history chat, switching chats, or sending a new message lands
+  // on the newest message. useLayoutEffect prevents the visible top-of-chat
+  // flash while the conversation is being painted.
+  useLayoutEffect(() => {
+    const element = messagesScrollRef.current;
+    if (!element || !activeSession?.id || isHistoryLoading) return;
+
+    const chatChanged = lastScrolledChatIdRef.current !== activeSession.id;
+    lastScrolledChatIdRef.current = activeSession.id;
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (
+      chatChanged ||
+      forceScrollToBottomRef.current ||
+      lastMessage?.role === "user" ||
+      stickToBottomRef.current
+    ) {
+      forceScrollToBottomRef.current = false;
+      stickToBottomRef.current = true;
+      element.scrollTop = element.scrollHeight;
+    }
   }, [activeSession?.id, messages.length, isHistoryLoading]);
+
 
   useEffect(() => {
     const element = document.querySelector<HTMLTextAreaElement>(
