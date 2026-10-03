@@ -19,6 +19,7 @@ type AttachmentRow = {
   frame_timestamp_ms: number | null;
   video_analysis?: string | null;
   video_analysis_at?: string | null;
+  extracted_text?: string | null;
   original_name: string;
   storage_path: string;
   mime_type: string;
@@ -360,9 +361,17 @@ async function processOne(
   supabase: any,
   frameAttachments: AttachmentRow[]
 ): Promise<ProcessedAttachment> {
-  const url = await signedUrlFor(supabase, attachment.storage_path);
   const mime = attachment.mime_type.toLowerCase();
   const extension = extensionOf(attachment.original_name);
+
+  if (!mime.startsWith("video/") && attachment.extracted_text?.trim()) {
+    return {
+      name: attachment.original_name,
+      content: attachment.extracted_text
+    };
+  }
+
+  const url = await signedUrlFor(supabase, attachment.storage_path);
 
   let content: string;
 
@@ -393,6 +402,32 @@ async function processOne(
       'The user uploaded "' + attachment.original_name + '". It is a ' + fileType + '. ' +
       "The file is stored securely. Identify it by its real file type when relevant. " +
       "Do not describe it as an unknown or unsupported format, and do not invent details about its internal contents.";
+  }
+
+  const isCacheable =
+    !mime.startsWith("video/") &&
+    (mime.startsWith("image/") ||
+      mime.startsWith("audio/") ||
+      mime === "application/pdf" ||
+      extension === "pdf" ||
+      extension === "docx" ||
+      mime ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      isTextLike(attachment));
+
+  if (isCacheable && content.trim()) {
+    try {
+      const { error: cacheError } = await supabase
+        .from("aperonix_files")
+        .update({ extracted_text: content })
+        .eq("id", attachment.id);
+
+      if (cacheError && !/extracted_text/i.test(String(cacheError.message ?? ""))) {
+        console.error("Aperonix attachment cache error:", cacheError);
+      }
+    } catch (cacheFailure) {
+      console.error("Aperonix attachment cache error:", cacheFailure);
+    }
   }
 
   return {
